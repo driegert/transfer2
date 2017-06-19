@@ -31,3 +31,7 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+# Compiled output files (I assume each user will want to compile the src files from scratch?
+*.o
+*.so

@@ -16,6 +16,7 @@
 
 # RStudio files
 .Rproj.user/
+*.Rproj
 
 # produced vignettes
 vignettes/*.html
@@ -35,3 +36,7 @@ vignettes/*.pdf
 # Compiled output files (I assume each user will want to compile the src files from scratch?
 *.o
 *.so
+*.mod
+
+# don't commit backup files either
+*.bak

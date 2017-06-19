@@ -1,0 +1,5 @@
+all: $(SHLIB)
+
+coh.o : mtm_mod.o
+
+test.o : mtm_mod.o

@@ -77,8 +77,8 @@ contains
   end subroutine cross_spec
 
   subroutine block_coh(d1, d2, ndata, block_size, overlap, dt &
-    , nw, k, nFFT, coh, freq, offsets, freq_range, max_freq_offset &
-    , calc_type, is_forward)
+    , nw, k, nFFT, coh, freq, offsets, freq_range_idx &
+    , max_freq_offset_idx, calc_type, is_forward)
   ! calc_type - integer - determines *what* to calculate
   !       1 - magnitude squared coherence
   !       2 - cross spectrum (complex)
@@ -87,7 +87,8 @@ contains
       , freq_range_idx(2), max_freq_offset_idx, block_incr &
       , coh_nrow, coh_ncol, dstart_idx, dend_idx, is_forward
     real*8 :: d1(ndata), d2(ndata), overlap, dt, nw &
-      , freq_range(2), max_freq_offset, df, freq(:), offsets(:)
+      , df, freq(:), offsets(:)
+    ! , freq_range(2), max_freq_offset not needed?
     ! freq(:) and offsets(:) were allocatable before
     real*8, allocatable :: s1(:), s2(:), s1_tot(:), s2_tot(:)
     complex*16 :: coh(:, :) ! was allocatable before
@@ -108,9 +109,9 @@ contains
 
     ! setting up for calling cross_spec() subroutine
     df = 1.0D0 / dble(dt*nFFT)
-    max_freq_offset_idx = ceiling(max_freq_offset / df)
-    freq_range_idx(1) = floor(freq_range(1) / df)
-    freq_range_idx(2) = ceiling(freq_range(2) / df)
+    ! max_freq_offset_idx = ceiling(max_freq_offset / df)
+    ! freq_range_idx(1) = floor(freq_range(1) / df)
+    ! freq_range_idx(2) = ceiling(freq_range(2) / df)
 
     coh_nrow = 2*max_freq_offset_idx + 1
     coh_ncol = freq_range_idx(2) - freq_range_idx(1) + 1

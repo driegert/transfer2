@@ -40,3 +40,4 @@ vignettes/*.pdf
 
 # don't commit backup files either
 *.bak
+.Rproj.user

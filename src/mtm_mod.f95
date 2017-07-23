@@ -56,22 +56,35 @@ contains
   ! cs12 - complex*16(2*max_idx + 1, 2*max_idx + 1)
   ! is_forward - logical - if .true., calculate forward coherence
   !
-    integer :: k, idx_start, idx_end, max_idx, niter, i, tmp_start, tmp_end, nband, is_forward
+    integer :: k, idx_start, idx_end, max_idx, niter, i, tmp_start, tmp_end &
+      , nband, is_forward, t, neg_len
     complex*16 :: yk1(nfreq, k), yk2(nfreq, k), cs12(2*max_idx + 1, idx_end - idx_start + 1)
+    complex*16, allocatable :: yk2tmp(:, :)
     ! logical :: is_forward ! change to integer for R ... ?
 
     niter = 2*max_idx + 1
     nband = idx_end - idx_start + 1
+    allocate(yk2tmp(nband, k))
 
     do i = 0, niter - 1
       tmp_start = idx_start - max_idx + i
-      ! tmp_end = idx_start + max_idx + i
       tmp_end = tmp_start + nband - 1
-      ! cs12(i+1, :) = sum(yk1(tmp_start:tmp_end, :) * yk2(tmp_start:tmp_end, :), 2)
-      if (is_forward == 1) then
-        cs12(i+1, :) = sum(yk1(idx_start:idx_end, : ) * conjg(yk2(tmp_start:tmp_end, : )), 2)
+
+!     This should take care of if f - offset occurs as a negative frequency
+      if (tmp_start <= 0 .and. tmp_end <= 0) then
+        yk2tmp(:, :) = conjg( yk2( (/(t, t = abs(tmp_start-2), abs(tmp_end-2), -1)/), : ) )
+      else if (tmp_start <= 0 .and. tmp_end > 0) then
+        neg_len = size((/(t, t = abs(tmp_start-2), 2, -1)/))
+        yk2tmp(1:neg_len, :) = conjg( yk2( (/(t, t = abs(tmp_start-2), 2, -1)/), : ) )
+        yk2tmp((neg_len+1):nband, :) =  yk2( 1:tmp_end, : )
       else
-        cs12(i+1, :) = sum(yk1(idx_start:idx_end, : ) * yk2(tmp_start:tmp_end, : ), 2)
+        yk2tmp = yk2(tmp_start:tmp_end, : )
+      end if
+
+      if (is_forward == 1) then
+        cs12(i+1, :) = sum(yk1(idx_start:idx_end, : ) * conjg(yk2tmp(:, :)), 2)
+      else
+        cs12(i+1, :) = sum(yk1(idx_start:idx_end, : ) * yk2tmp(:, :), 2)
       end if
     end do
   end subroutine cross_spec
@@ -179,17 +192,31 @@ contains
 
   subroutine coh_denom(cs, s1, s2, cnrow, cncol, idx_start, idx_end, max_idx)
     integer :: idx_start, idx_end, max_idx, niter, nband &
-      , tmp_start, tmp_end, cnrow, cncol, i
+      , tmp_start, tmp_end, cnrow, cncol, i, t, neg_len
+    integer, allocatable :: idx_tmp(:)
     real*8 :: s1(nfreq), s2(nfreq)
     complex*16 :: cs(cnrow, cncol)
 
     niter = 2*max_idx + 1
     nband = idx_end - idx_start + 1
+    allocate(idx_tmp(nband))
 
     do i = 0, niter - 1
       tmp_start = idx_start - max_idx + i
       tmp_end = tmp_start + nband - 1
-      cs(i+1, :) = cs(i+1, : ) / dble(sqrt((s1(idx_start:idx_end) * s2(tmp_start:tmp_end))))
+
+!     This should take care of if f - offset occurs as a negative frequency
+      if (tmp_start <= 0 .and. tmp_end <= 0) then
+        idx_tmp = (/ (t, t = abs(tmp_start-2), abs(tmp_end-2), -1) /)
+      else if (tmp_start <= 0 .and. tmp_end > 0) then
+        neg_len = size((/(t, t = abs(tmp_start-2), 2, -1)/))
+        idx_tmp(1:neg_len) = (/ (t, t = abs(tmp_start-2), 2, -1) /)
+        idx_tmp((neg_len+1):nband) =  (/ (t, t = 1, tmp_end, 1) /)
+      else
+        idx_tmp = (/ (t, t = tmp_start, tmp_end, 1) /)
+      end if
+
+      cs(i+1, :) = cs(i+1, : ) / dble(sqrt((s1(idx_start:idx_end) * s2(idx_tmp))))
     end do
   end subroutine coh_denom
 

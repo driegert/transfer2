@@ -45,7 +45,7 @@ coherence <- function(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0
     
     freqRangeIdx <- c(1, nFFT/2+1)
   } else {
-    freqRangeIdx <- c(floor(freqRange[1] / df), ceiling(freqRange[2]/df))
+    freqRangeIdx <- c(max(1, floor(freqRange[1] / df)), ceiling(freqRange[2]/df))
   }
   
   # print(paste0("ndata: ", ndata))

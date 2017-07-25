@@ -148,3 +148,14 @@ testcross2 <- function(d1, d2, nw, k, nFFT, idx_start, idx_end, idx_max, dt){
                   , idx_max = as.integer(idx_max), dt = as.double(dt))
   out
 }
+
+#' Test out to see if the regression stuff works... 
+#' @export
+testSvdReg <- function(Y, X){
+  m <- dim(X)[1]
+  n <- dim(X)[2]
+  
+  out <- .Fortran("svdRegTest", Y = as.complex(Y), X = as.complex(X), m = as.integer(m)
+                  , n = as.integer(n), beta = complex(n), stdErr = double(n), svd_ev = double(n))
+  out
+}

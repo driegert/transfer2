@@ -204,3 +204,14 @@ subroutine testcross2(d1, d2, ndata, cs12, nw, k, nFFT, idx_start, idx_end, idx_
   call fft_cleanup
   call dpss_cleanup
 end subroutine testcross2
+
+subroutine svdRegTest(Y, X, m, n, beta, stdErr, svd_ev)
+  use mtm_mod
+  implicit none
+
+  integer :: m, n
+  real*8 :: svd_ev(n), stdErr(n)
+  complex*16 :: Y(m), X(m, n), beta(n)
+
+  call zSvdRegression(Y, X, m, n, beta, stdErr, svd_ev)
+end subroutine svdRegTest

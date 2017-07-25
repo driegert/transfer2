@@ -1,5 +1,7 @@
 subroutine callblockcoh(d1, d2, ndata, block_size, overlap, dt &
-  , nw, k, nFFT, coh, cohnrow, cohncol, freq, offsets, freq_range_idx, max_freq_offset_idx, calc_type, is_forward)
+  , nw, k, nFFT, coh, cohnrow, cohncol, freq, offsets, freq_range_idx &
+  , max_freq_offset_idx, calc_type, is_forward)
+
   use mtm_mod
   implicit none
   integer :: ndata, block_size, k, nFFT, calc_type, is_forward, cohnrow, cohncol, freq_range_idx(2), max_freq_offset_idx

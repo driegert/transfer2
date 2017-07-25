@@ -403,6 +403,71 @@ contains
     yk = yk * dk
   end subroutine weighted_eigencoef
 
+  subroutine zSvdRegression(Y, X, m, n, beta, stdErr, svd_ev)
+  ! uses the SVD of the matrix X to calculate the regression coefficients for
+  ! the model: Y = XB (where B is a vector of beta coefficients)
+  !
+  ! as a side note: this mxn notation is bad... as a result of lapack docs
+  !
+  ! [in] Y      - complex*16(m)  - response vector
+  ! [in] X      - complex*16(m,n)  - design matrix
+  ! [in] m      - integer - number of rows of both Y and X
+  ! [in] n      - integer - number of columns of X
+  ! [out] beta  - complex*16(n) - the regression coefficients
+  ! [out] stdErr  - real*8(n) - the standard error on the beta estimates
+  ! [out] ev    - real*8(n) - the square of the singular values
+
+    integer :: i, m, n, lda, ldu, ldvt, lwork, info, lrwork
+    real*8 :: svd_ev(n), stdErr(n), lworkopt
+    real*8, allocatable :: rwork(:), s(:)
+    complex*16 :: Y(m), X(m, n), beta(n)
+    complex*16, allocatable :: work(:), u(:, :), vt(:, :)
+    character(1) :: jobu, jobvt
+
+    ! 'S' says that we want the left and right singular vectors
+    jobu = 'S'
+    jobvt = 'S'
+    lda = m
+    ldu = m
+    ldvt = n
+
+    ! set values according to:
+    ! http://www.netlib.org/lapack/explore-html/index.html
+    ! search for zgesvd
+    lrwork = 5*min(m, n)
+    allocate(rwork(lrwork))
+    allocate(s(min(m,n)))
+    allocate(u(ldu, min(m,n)))
+    allocate(vt(ldvt, n))
+
+    ! obtain optimal size for lwork
+    lwork = -1
+    call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+      , lworkopt, lwork, rwork, info)
+
+    ! allocate the work array
+    lwork = nint(lworkopt)
+    allocate(work(lwork))
+
+    ! perform the svd
+    call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+      , work, lwork, rwork, info)
+
+    ! calculate them betas '*' is matrix mult here
+    ! beta = V * s^(-1) * [ t(u) Y ] (mandel - eqn's (17) and (12))
+    beta = matmul( transpose(vt), matmul( transpose(conjg(u)), Y ) / s )
+
+    ! calculate the standard error estiamtes on the betas
+    ! mandel eqn (20) NOT YET IMPLEMENTED
+    do i = 1, n
+      stdErr(i) = -1 !sum(vt(:, i)x)
+    end do
+
+    do i = 1, n
+      svd_ev(i) =  -1 ! NOT YET IMPLEMENTED!
+    end do
+  end subroutine zSvdRegression
+
   function cabs2(x, nrow, ncol)
     integer :: nrow, ncol
     real*8 :: cabs2(nrow, ncol)
@@ -414,6 +479,6 @@ contains
   subroutine testem(x)
     integer :: x
 
-    x = nfreq
+    x = 5
   end subroutine testem
 end module mtm_mod

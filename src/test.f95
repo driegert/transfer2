@@ -205,6 +205,45 @@ subroutine testcross2(d1, d2, ndata, cs12, nw, k, nFFT, idx_start, idx_end, idx_
   call dpss_cleanup
 end subroutine testcross2
 
+subroutine zsvd(Y, X, m, n, u, s, vt)
+  implicit none
+
+  integer :: i, m, n, lda, ldu, ldvt, lwork, info, lrwork
+  real*8 :: lworkopt
+  real*8, allocatable :: rwork(:), s(:)
+  complex*16 :: Y(m), X(m, n), beta(n)
+  complex*16, allocatable :: svd_work(:), u(:, :), vt(:, :)
+  character(1) :: jobu, jobvt
+
+  jobu = 'S'
+  jobvt = 'S'
+  lda = m
+  ldu = m
+  ldvt = n
+
+  ! set values according to:
+  ! http://www.netlib.org/lapack/explore-html/index.html
+  ! search for zgesvd
+  lrwork = 5*min(m, n)
+  allocate(rwork(lrwork))
+  allocate(s(min(m,n)))
+  allocate(u(ldu, min(m,n)))
+  allocate(vt(ldvt, n))
+
+  ! obtain optimal size for lwork
+  lwork = -1
+  call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+    , lworkopt, lwork, rwork, info)
+
+  ! allocate the work array
+  lwork = nint(lworkopt)
+  allocate(svd_work(lwork))
+
+  ! perform the svd
+  call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+    , svd_work, lwork, rwork, info)
+end subroutine zsvd
+
 subroutine svdRegTest(Y, X, m, n, beta, stdErr, svd_ev)
   use mtm_mod
   implicit none

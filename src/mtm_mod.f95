@@ -421,7 +421,7 @@ contains
     real*8 :: svd_ev(n), stdErr(n), lworkopt
     real*8, allocatable :: rwork(:), s(:)
     complex*16 :: Y(m), X(m, n), beta(n)
-    complex*16, allocatable :: work(:), u(:, :), vt(:, :)
+    complex*16, allocatable :: svd_work(:), u(:, :), vt(:, :)
     character(1) :: jobu, jobvt
 
     ! 'S' says that we want the left and right singular vectors
@@ -447,11 +447,11 @@ contains
 
     ! allocate the work array
     lwork = nint(lworkopt)
-    allocate(work(lwork))
+    allocate(svd_work(lwork))
 
     ! perform the svd
     call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
-      , work, lwork, rwork, info)
+      , svd_work, lwork, rwork, info)
 
     ! calculate them betas '*' is matrix mult here
     ! beta = V * s^(-1) * [ t(u) Y ] (mandel - eqn's (17) and (12))

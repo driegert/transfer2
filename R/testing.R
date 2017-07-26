@@ -159,3 +159,13 @@ testSvdReg <- function(Y, X){
                   , n = as.integer(n), beta = complex(n), stdErr = double(n), svd_ev = double(n))
   out
 }
+
+#' @export
+testZsvd <- function(Y, X){
+  m <- dim(X)[1]
+  n <- dim(X)[2]
+  
+  out <- .Fortran("zsvd", Y = as.complex(Y), X = as.complex(X), m = as.integer(m), n = as.integer(n)
+                  ,  u = complex(m*n), s = double(n), vt = complex(n*n))
+  out
+}

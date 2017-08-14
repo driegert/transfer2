@@ -169,3 +169,9 @@ testZsvd <- function(Y, X){
                   ,  u = complex(m*n), s = double(n), vt = complex(n*n))
   out
 }
+
+testMSC <- function(){
+  dat <- readRDS("~/school_lab/phd_proposal/assets/data/geomag/boulder_1999-2012_15min_final.rds")
+  
+  
+}

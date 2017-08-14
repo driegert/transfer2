@@ -220,6 +220,41 @@ contains
     end do
   end subroutine coh_denom
 
+!! ######################################
+!! ######################################
+  ! subroutine tf(d1, d2, ndata, npred, block_size, overlap, dt &
+  !   , nw, k, nFFT, freq_range_idx &
+  !   , max_freq_offset_idx, calc_type, is_forward)
+  !
+  !   integer :: ndata, npred, block_size, k, nFFT, i &
+  !     , freq_range_idx(2), max_freq_offset_idx(2), calc_type &
+  !     , block_incr, dstart_idx, dend_idx, is_forward
+  !   real*8 :: d1(ndata), d2(ndata, npred), overlap, dt, nw
+  !   complex*16 :: coh(:, :) ! was allocatable before
+  !   complex*16, allocatable :: yk1(:, :), yk2(:, :), cohwrk(:, :) &
+  !     , H(:, :)
+  !
+  !   if (block_size > ndata) then
+  !     print *, 'Block size is larger than data available.'
+  !     return
+  !   end if
+  !
+  !   ! setup the fft work matrices and dpss vectors
+  !   call fft_setup(nFFT)
+  !   call dpss_setup(block_size, nw, k, nFFT)
+  !
+  !   ! setting up block indices
+  !   block_incr = floor(block_size * (1.0D0 - overlap))
+  !
+  !   allocate(yk1(nfreq, k), yk2(nfreq, k))
+  !
+  !
+  !   call dpss_cleanup()
+  !   call fft_cleanup()
+  ! end subroutine tf
+!! ######################################
+!! ######################################
+
   subroutine freq_array(freq, nFFT, dt)
     integer :: i, nFFT
     real*8 :: freq(nfreq), dt
@@ -455,7 +490,7 @@ contains
 
     ! calculate them betas '*' is matrix mult here
     ! beta = V * s^(-1) * [ t(u) Y ] (mandel - eqn's (17) and (12))
-    beta = matmul( transpose(vt), matmul( transpose(conjg(u)), Y ) / s )
+    beta = matmul( transpose(conjg(vt)), matmul( transpose(conjg(u)), Y ) / s )
 
     ! calculate the standard error estiamtes on the betas
     ! mandel eqn (20) NOT YET IMPLEMENTED

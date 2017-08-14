@@ -99,6 +99,23 @@ mscQTransform <- function(c, k, msc = TRUE){
   }
 }
 
+#' Normal Transform for Magnitude Squared Coherence
+#' 
+#' Converts the MSC to a Gaussian distribution
+#' 
+#' @param msc A vector containing the magnitude squared coherence.
+#' @param dof Degrees of freedom of the msc
+#' 
+#' @details This code was provided by Emily Somerset.
+#' 
+#' @export
+msc2norm <- function(msc, dof){
+  uTran <- 1 - (1-msc)^(dof-1) #
+  erf.inv <- function(x) { qnorm((x + 1)/2)/sqrt(2) }
+  
+  0 + sqrt(2)*1*erf.inv(2*tran - 1)
+}
+
 #' Determines the local maxes of MSC
 #' 
 #' Finds the local max of the normal transformed MSC by checking the neighbours.

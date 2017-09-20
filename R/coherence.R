@@ -22,14 +22,18 @@
 #' 2 - calculate the cross and auto spectra on each block, average each quantity 
 #' across blocks, then calculate the coherency;
 #' 3 - calculate the coherency on each block, then average
+#' 4 - returns the minimum MSC across blocks
 #' @param forward An \code{integer} indicating whether the forward (1) or reverse (0) coherence
 #' should be calculated.
+#' @param name1 a \code{character} string giving the name of the first data set used.
+#' @param name2 a \code{character} string giving the name of the second data set used.
 #' 
 #' @export
 #' @useDynLib transfer2
 coherence <- function(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0
                       , dt = 1, nw = 4, k = 7, nFFT = NULL, freqRange = NULL
-                      , maxFreqOffset = 0, calcType = 1, forward = 1)
+                      , maxFreqOffset = 0, calcType = 1, forward = 1
+                      , name1 = "d1", name2 = "d2")
 {
   if (is.null(nFFT) || nFFT < blockSize) {
     nFFT <- 2^(floor(log2(blockSize))+2)
@@ -72,13 +76,33 @@ coherence <- function(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0
                   , calc_type = as.integer(calcType)
                   , is_forward = as.integer(forward))
   
-  # list(coh = matrix(out$coh, nrow = nrow))
   if (calcType == 1){
+    calcTypeDesc <- "Average of MSCs"
+  } else if (calcType == 2){
+    calcTypeDesc <- "MSC of Averages"
+  } else if (calcType == 3){
+    calcTypeDesc <- "MSC of Average Coherency"
+  } else if (calcType == 4){
+    calcTypeDesc <- "Minimum of MSCs"
+  }
+  
+  # provides all the argument info used to calculate the coherence
+  info <- list(d1 = name1, d2 = name2, ndata = ndata, blockSize = blockSize
+               , overlap = overlap, deltat = dt
+               , nw = nw, k = k, nFFT = nFFT, freqRange = freqRange
+               , freqRangeIdx = freqRangeIdx, maxFreqOffset = maxFreqOffset
+               , maxFreqOffsetIdx = maxOffIdx
+               , calcType = calcType, calcTypeDesc = calcTypeDesc, forward = forward)
+  
+  # list(coh = matrix(out$coh, nrow = nrow))
+  if (calcType == 1 | calcType == 4){
     list(coh = matrix(Re(out$coh), nrow = nrow, ncol = ncol), offset = out$offsets
-         , bandfreq = freq[freqRangeIdx[1]:freqRangeIdx[2]])
+         , bandfreq = freq[freqRangeIdx[1]:freqRangeIdx[2]]
+         , info = info)
   } else {
     list(coh = matrix(out$coh, nrow = nrow, ncol = ncol), offset = out$offsets
-         , bandfreq = freq[freqRangeIdx[1]:freqRangeIdx[2]])
+         , bandfreq = freq[freqRangeIdx[1]:freqRangeIdx[2]]
+         , info = info)
   }
 }
 

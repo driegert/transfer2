@@ -96,9 +96,11 @@ contains
   !       1 - magnitude squared coherence
   !       2 - cross spectrum (complex)
   !       3 - coherency (complex valued)
+  !       4 - minimum at each offset
     integer :: ndata, block_size, k, nFFT, calc_type, i &
       , freq_range_idx(2), max_freq_offset_idx, block_incr &
-      , coh_nrow, coh_ncol, dstart_idx, dend_idx, is_forward
+      , coh_nrow, coh_ncol, dstart_idx, dend_idx, is_forward &
+      , ii, jj
     real*8 :: d1(ndata), d2(ndata), overlap, dt, nw &
       , df, freq(:), offsets(:)
     ! , freq_range(2), max_freq_offset not needed?
@@ -145,7 +147,8 @@ contains
 
     call offset_array(offsets, max_freq_offset_idx, df)
     i = 0
-    coh(:, :) = dcmplx(0.0D0, 0.0D0)
+    !coh(:, :) = dcmplx(0.0D0, 0.0D0) ! was this before
+    coh(:, :) = dcmplx(1.0D0, 0.0D0) ! as of Sept. 20
 
     do while (i*block_incr + block_size <= ndata)
       dstart_idx = i*block_incr + 1
@@ -175,10 +178,27 @@ contains
         call coh_denom(cohwrk, s1, s2, coh_nrow, coh_ncol &
           , freq_range_idx(1), freq_range_idx(2), max_freq_offset_idx)
         coh = coh + cohwrk
+      else if (calc_type == 4) then ! minimum MSC
+        call coh_denom(cohwrk, s1, s2, coh_nrow, coh_ncol &
+          , freq_range_idx(1), freq_range_idx(2), max_freq_offset_idx)
+        do jj = 1, coh_ncol
+          do ii = 1, coh_nrow
+            !realpart(x)**2 + imagpart(x)**2
+            coh(ii, jj) = dcmplx(min(realpart(coh(ii, jj))**2 + &
+             imagpart(coh(ii, jj))**2 &
+             , realpart(cohwrk(ii, jj))**2 + imagpart(cohwrk(ii, jj))**2) &
+             , 0.0D0)
+            !coh(ii, jj) = dcmplx(min(cabs2(coh(ii, jj), 1, 1), cabs2(cohwrk(ii, jj), 1, 1)), 0.0D0)
+          end do
+        end do
       end if
     end do
 
-    coh = coh / dble(i)
+    ! don't average if we're calculating the minimum ...
+    if (calc_type .ne. 4) then
+      coh = coh / dble(i)
+    end if
+
     if (calc_type == 2) then
       s1 = s1_tot / dble(i)
       s2 = s2_tot / dble(i)

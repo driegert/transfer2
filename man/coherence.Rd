@@ -6,7 +6,8 @@
 \usage{
 coherence(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0,
   dt = 1, nw = 4, k = 7, nFFT = NULL, freqRange = NULL,
-  maxFreqOffset = 0, calcType = 1, forward = 1)
+  maxFreqOffset = 0, calcType = 1, forward = 1, name1 = "d1",
+  name2 = "d2")
 }
 \arguments{
 \item{d1}{A \code{numeric} vector containing the first series.}
@@ -39,10 +40,15 @@ be performed:
 1 - calculate the MSC on each block, then average;
 2 - calculate the cross and auto spectra on each block, average each quantity 
 across blocks, then calculate the coherency;
-3 - calculate the coherency on each block, then average}
+3 - calculate the coherency on each block, then average
+4 - returns the minimum MSC across blocks}
 
 \item{forward}{An \code{integer} indicating whether the forward (1) or reverse (0) coherence
 should be calculated.}
+
+\item{name1}{a \code{character} string giving the name of the first data set used.}
+
+\item{name2}{a \code{character} string giving the name of the second data set used.}
 }
 \description{
 Calculates the magnitude squared coherence estimate

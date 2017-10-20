@@ -2,7 +2,7 @@
 #' 
 #' Calculates the magnitude squared coherence estimate
 #' 
-#' @param d1 A \code{numeric} vector containing the first series.
+#' @param d1 A \code{numeric} vector containing the first series (central frequency is used in this series).
 #' @param d2 A \code{numeric} vector containing the second series (same length as \code{d1}).
 #' @param ndata The total length of d1 or d2.
 #' @param blockSize The length of a single block to use (if blocking)
@@ -88,7 +88,8 @@ coherence <- function(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0
   
   # provides all the argument info used to calculate the coherence
   info <- list(d1 = name1, d2 = name2, ndata = ndata, blockSize = blockSize
-               , overlap = overlap, deltat = dt
+               , overlap = overlap, nblocks = ndata / (blockSize * (1 - overlap))
+               , deltat = dt
                , nw = nw, k = k, nFFT = nFFT, freqRange = freqRange
                , freqRangeIdx = freqRangeIdx, maxFreqOffset = maxFreqOffset
                , maxFreqOffsetIdx = maxOffIdx

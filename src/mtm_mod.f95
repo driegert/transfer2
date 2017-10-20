@@ -147,8 +147,11 @@ contains
 
     call offset_array(offsets, max_freq_offset_idx, df)
     i = 0
-    !coh(:, :) = dcmplx(0.0D0, 0.0D0) ! was this before
-    coh(:, :) = dcmplx(1.0D0, 0.0D0) ! as of Sept. 20
+    if (calc_type == 4) then
+      coh(:, :) = dcmplx(1.0D0, 0.0D0) ! as of Sept. 20
+    else
+      coh(:, :) = dcmplx(0.0D0, 0.0D0) ! was this before
+    end if
 
     do while (i*block_incr + block_size <= ndata)
       dstart_idx = i*block_incr + 1
@@ -191,6 +194,8 @@ contains
             !coh(ii, jj) = dcmplx(min(cabs2(coh(ii, jj), 1, 1), cabs2(cohwrk(ii, jj), 1, 1)), 0.0D0)
           end do
         end do
+      else
+        coh = dcmplx(999.0D0, 999.0D0)
       end if
     end do
 

@@ -28,15 +28,40 @@
 #' @param name1 a \code{character} string giving the name of the first data set used.
 #' @param name2 a \code{character} string giving the name of the second data set used.
 #' 
+#' @details Things to think about: 1) blockSize and overlap are going to be very important considerations... 
+#' Need to be careful that "block_incr" in mtm_mod.f95 is (are) being calculated correctly.  I.e., YOU, the user 
+#' need to be cogniscent of the values you're using -_- .
+#' 
 #' @export
 #' @useDynLib transfer2
-coherence <- function(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0
-                      , dt = 1, nw = 4, k = 7, nFFT = NULL, freqRange = NULL
+coherence <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
+                      , blockSize = ndata, blockSize2 = blockSize, overlap = 0
+                      , dt = 1, dt2 = dt, nw = 4, nw2 = NULL, k = 7
+                      , nFFT = NULL, nFFT2 = nFFT
+                      , freqRange = NULL
                       , maxFreqOffset = 0, calcType = 1, forward = 1
+                      , conv_msc2norm = 0
                       , name1 = "d1", name2 = "d2")
 {
+  # You need to be hella careful with nFFT and nFFT2:
+  # nFFT2 / nFFT needs to be an integer, otherwise... things will go poorly
+  # One (me) assumes that you will be using powers of 2 ... 
+  if (dt < dt2){
+    stop("d1 is the central frequency series.  You should make the faster sampled series d2.")
+  }
+  
   if (is.null(nFFT) || nFFT < blockSize) {
     nFFT <- 2^(floor(log2(blockSize))+2)
+  }
+  
+  if (is.null(nFFT2) || nFFT2 < blockSize2){
+    nFFT2 <- 2^(floor(log2(blockSize2))+2)
+  }
+  
+  # if nw2 is null, make the effective W's the same
+  if (is.null(nw2)){
+    w1 <- nw / blockSize
+    nw2 <- w1*blockSize2
   }
   
   df <- 1 / (dt*nFFT)
@@ -62,18 +87,20 @@ coherence <- function(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0
   # print(maxFreqOffset)
   
   # print(paste0("# offsets: ", nrow, " and # freqs: ", ncol))
-  
   # .Fortran("dpss", as.integer(ndata), as.integer(k), as.double(nw), double(ndata*k), double(k))  
   out <- .Fortran("callblockcoh", d1 = as.double(d1), d2 = as.double(d2)
-                  , ndata = as.integer(ndata), block_size = as.integer(blockSize)
-                  , overlap = as.double(overlap), dt = as.double(dt)
-                  , nw = as.double(nw), k = as.integer(k), nFFT = as.integer(nFFT)
+                  , ndata = as.integer(ndata), ndata2 = as.integer(ndata2)
+                  , block_size = as.integer(blockSize), block_size2 = as.integer(blockSize2)
+                  , overlap = as.double(overlap), dt = as.double(dt), dt2 = as.double(dt2)
+                  , nw = as.double(nw), nw2 = as.double(nw2), k = as.integer(k)
+                  , nFFT = as.integer(nFFT), nFFT2 = as.integer(nFFT2)
                   , coh = complex(nrow*ncol), cohnrow = as.integer(nrow)
                   , cohncol = as.integer(ncol)
                   , freq = as.double(freq)
                   , offsets = double(nrow), freq_range_idx = as.integer(freqRangeIdx)
                   , max_freq_offset_idx = as.integer(maxOffIdx)
                   , calc_type = as.integer(calcType)
+                  , conv_msc2norm = as.integer(conv_msc2norm)
                   , is_forward = as.integer(forward))
   
   if (calcType == 1){
@@ -87,13 +114,15 @@ coherence <- function(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0
   }
   
   # provides all the argument info used to calculate the coherence
-  info <- list(d1 = name1, d2 = name2, ndata = ndata, blockSize = blockSize
+  info <- list(d1 = name1, d2 = name2, ndata = ndata, ndata2 = ndata2
+               , blockSize = blockSize, blockSize2 = blockSize2
                , overlap = overlap, nblocks = ndata / (blockSize * (1 - overlap))
-               , deltat = dt
+               , deltat = dt, deltat2 = dt2
                , nw = nw, k = k, nFFT = nFFT, freqRange = freqRange
                , freqRangeIdx = freqRangeIdx, maxFreqOffset = maxFreqOffset
                , maxFreqOffsetIdx = maxOffIdx
-               , calcType = calcType, calcTypeDesc = calcTypeDesc, forward = forward)
+               , calcType = calcType, calcTypeDesc = calcTypeDesc, forward = forward
+               , conv_msc2norm = conv_msc2norm)
   
   # list(coh = matrix(out$coh, nrow = nrow))
   if (calcType == 1 | calcType == 4){
@@ -135,7 +164,7 @@ mscQTransform <- function(c, k, msc = TRUE){
 #' 
 #' @export
 msc2norm <- function(msc, dof){
-  uTran <- 1 - (1-msc)^(dof-1) #
+  tran <- 1 - (1-msc)^(dof-1) #
   erf.inv <- function(x) { qnorm((x + 1)/2)/sqrt(2) }
   
   0 + sqrt(2)*1*erf.inv(2*tran - 1)

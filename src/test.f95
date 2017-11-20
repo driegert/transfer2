@@ -20,8 +20,8 @@ subroutine testcd(cs, s1, s2, cnrow, cncol &
   complex*16 :: cs(cnrow, cncol)
   real*8 :: s1(nFFT/2+1), s2(nFFT/2+1)
 
-  call fft_setup(nFFT)
-  call coh_denom(cs, s1, s2, cnrow, cncol, idx_start, idx_end, max_idx)
+  call fft_setup(nFFT, 1)
+  call coh_denom(cs, s1, s2, cnrow, cncol, idx_start, idx_end, max_idx, 1)
 end subroutine testcd
 
 subroutine test3(nf)
@@ -29,7 +29,7 @@ subroutine test3(nf)
   implicit none
   integer :: nf
 
-  call fft_setup(128)
+  call fft_setup(128, 1)
   call testem(nf)
 end subroutine
 
@@ -39,14 +39,14 @@ subroutine testdpss(n, nw, k, vec, val, nFFT)
   integer :: n, k, nFFT
   real*8 :: nw, vec(n, k), val(k)
 
-  call fft_setup(nFFT)
-  call dpss_setup(n, nw, k, nFFT)
+  call fft_setup(nFFT, 1)
+  call dpss_setup(n, nw, k, nFFT, 1)
 
   vec = v
   val = ev
 
-  call fft_cleanup
-  call dpss_cleanup
+  call fft_cleanup(1)
+  call dpss_cleanup(1)
 end subroutine testdpss
 
 
@@ -58,8 +58,8 @@ subroutine testratios(ndata, nw, k, ratios, vec, val, nFFT, cx)
   real *8 :: nw, w, ratios(ndata), vec(ndata, k), val(k)
   complex*16 :: cx(nFFT, k)
 
-  call fft_setup(nFFT)
-  call dpss_setup(ndata, nw, k, nFFT)
+  call fft_setup(nFFT, 1)
+  call dpss_setup(ndata, nw, k, nFFT, 1)
 
   vec = v
   val = ev
@@ -91,8 +91,8 @@ subroutine testratios(ndata, nw, k, ratios, vec, val, nFFT, cx)
     ev(j) = 2.0D0*ev(j) + ratios(1)*realpart(cx(1, j))
   end do
 
-  call fft_cleanup
-  call dpss_cleanup
+  call fft_cleanup(1)
+  call dpss_cleanup(1)
 end subroutine testratios
 
 subroutine testcross(yk1, yk2, cs12, k, nFFT, idx_start, idx_end, idx_max)
@@ -104,9 +104,9 @@ subroutine testcross(yk1, yk2, cs12, k, nFFT, idx_start, idx_end, idx_max)
 
   forward = 1
 
-  call fft_setup(nFFT)
-  call cross_spec(yk1, yk2, cs12, k, idx_start, idx_end, idx_max, forward)
-  call fft_cleanup
+  call fft_setup(nFFT, 1)
+  call cross_spec(yk1, yk2, cs12, k, idx_start, idx_end, idx_max, 1, forward)
+  call fft_cleanup(1)
 end subroutine testcross
 
 subroutine testeigen(d, ndata, nw, k, yk, nFFT, dt)
@@ -116,13 +116,13 @@ subroutine testeigen(d, ndata, nw, k, yk, nFFT, dt)
   real*8 :: d(ndata), nw, dt, s(nFFT/2+1)
   complex*16 :: yk(nFFT, k)
 
-  call fft_setup(nFFT)
-  call dpss_setup(ndata, nw, k, nFFT)
+  call fft_setup(nFFT, 1)
+  call dpss_setup(ndata, nw, k, nFFT, 1)
   ! call eigenCoef(d, ndata, nw, k, yk, nFFT, dt)
-  call weighted_eigencoef(d, ndata, dt, nw, k, yk, s, nFFT)
+  call weighted_eigencoef(d, ndata, dt, nw, k, yk, s, nFFT, 1)
 
-  call fft_cleanup
-  call dpss_cleanup
+  call fft_cleanup(1)
+  call dpss_cleanup(1)
 end subroutine testeigen
 
 subroutine testweights(d, yk, dk, k, var, dt, ndata, nFFT, nw, eval)
@@ -132,15 +132,15 @@ subroutine testweights(d, yk, dk, k, var, dt, ndata, nFFT, nw, eval)
   real*8 :: d(ndata), nw, dt, var, dk(nFFT/2+1, k), spec(nFFT/2+1), dofs(nFFT/2+1), dofav, eval(k)
   complex*16 :: yk(nFFT/2+1, k)
 
-  call fft_setup(nFFT)
-  call dpss_setup(ndata, nw, k, nFFT)
+  call fft_setup(nFFT, 1)
+  call dpss_setup(ndata, nw, k, nFFT, 1)
 
   ev = eval
   ! call variance(d, ndata, var)
   ! call eigencoef(d, ndata, nw, k, yk, nFFT, dt)
-  call adaptive_weights(yk, dk, k, spec, dofs, dofav, var, dt)
-  call fft_cleanup
-  call dpss_cleanup
+  call adaptive_weights(yk, dk, k, spec, dofs, dofav, var, dt, 1)
+  call fft_cleanup(1)
+  call dpss_cleanup(1)
 end subroutine testweights
 
 subroutine weightwrapper(sa, dk, nFFT, k, ev, var, dt)
@@ -167,9 +167,9 @@ subroutine testfft(d, ndata, nFFT, c)
   complex*16 :: c(nFFT)
 
   c(1:ndata) = dcmplx(d(1:ndata), 0.0D0)
-  call fft_setup(nFFT)
+  call fft_setup(nFFT, 1)
   call cfft1f(nFFT, inc, c, lenc, wsave, lensav, work, lenwrk, ier)
-  call fft_cleanup
+  call fft_cleanup(1)
 end subroutine testfft
 
 ! subroutine testpfft(d, ndata, nFFT, c)
@@ -196,13 +196,13 @@ subroutine testcross2(d1, d2, ndata, cs12, nw, k, nFFT, idx_start, idx_end, idx_
 
   forward = 1
 
-  call fft_setup(nFFT)
-  call dpss_setup(ndata, nw, k, nFFT)
-  call weighted_eigencoef(d1, ndata, dt, nw, k, yk1, s1, nFFT)
-  call weighted_eigencoef(d2, ndata, dt, nw, k, yk2, s2, nFFT)
-  call cross_spec(yk1, yk2, cs12, k, idx_start, idx_end, idx_max, forward)
-  call fft_cleanup
-  call dpss_cleanup
+  call fft_setup(nFFT,1)
+  call dpss_setup(ndata, nw, k, nFFT,1)
+  call weighted_eigencoef(d1, ndata, dt, nw, k, yk1, s1, nFFT,1)
+  call weighted_eigencoef(d2, ndata, dt, nw, k, yk2, s2, nFFT,1)
+  call cross_spec(yk1, yk2, cs12, k, idx_start, idx_end, idx_max, 1, forward)
+  call fft_cleanup(1)
+  call dpss_cleanup(1)
 end subroutine testcross2
 
 subroutine zsvd(Y, X, m, n, u, s, vt)

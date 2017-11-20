@@ -4,13 +4,14 @@
 \alias{coherence}
 \title{Calculate the multitaper coherence estimate}
 \usage{
-coherence(d1, d2, ndata = length(d1), blockSize = ndata, overlap = 0,
-  dt = 1, nw = 4, k = 7, nFFT = NULL, freqRange = NULL,
-  maxFreqOffset = 0, calcType = 1, forward = 1, name1 = "d1",
-  name2 = "d2")
+coherence(d1, d2, ndata = length(d1), ndata2 = length(d2),
+  blockSize = ndata, blockSize2 = blockSize, overlap = 0, dt = 1,
+  dt2 = dt, nw = 4, nw2 = NULL, k = 7, nFFT = NULL, nFFT2 = nFFT,
+  freqRange = NULL, maxFreqOffset = 0, calcType = 1, forward = 1,
+  conv_msc2norm = 0, name1 = "d1", name2 = "d2")
 }
 \arguments{
-\item{d1}{A \code{numeric} vector containing the first series.}
+\item{d1}{A \code{numeric} vector containing the first series (central frequency is used in this series).}
 
 \item{d2}{A \code{numeric} vector containing the second series (same length as \code{d1}).}
 
@@ -52,4 +53,9 @@ should be calculated.}
 }
 \description{
 Calculates the magnitude squared coherence estimate
+}
+\details{
+Things to think about: 1) blockSize and overlap are going to be very important considerations... 
+Need to be careful that "block_incr" in mtm_mod.f95 is (are) being calculated correctly.  I.e., YOU, the user 
+need to be cogniscent of the values you're using -_- .
 }

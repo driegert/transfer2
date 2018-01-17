@@ -134,7 +134,7 @@ contains
   end subroutine cross_spec
 
   subroutine block_coh(d1, d2, ndata, ndata2, block_size, block_size2 &
-    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, coh, freq &
+    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio, coh, freq &
     , offsets, freq_range_idx, max_freq_offset_idx &
     , calc_type, conv_msc2norm, is_forward)
   ! calc_type - integer - determines *what* to calculate
@@ -172,7 +172,7 @@ contains
     call dpss_setup(block_size, nw, k, nFFT, 1)
     call dpss_setup(block_size2, nw2, k, nFFT2, 2)
 
-    fRatio = nFFT2 / nFFT
+    ! fRatio = (nFFT2 * dt2) / (nFFT * dt)
     dtRatio = dt / dt2
 
     ! allocate(freq(nfreq))
@@ -327,69 +327,45 @@ contains
 !! ######################################
 !! ######################################
   subroutine tf(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
-    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2 &
-    , freq_range_idx, max_freq_offset_idx &
-    , use_zero, use_off, nOff &
-    , calc_type, is_forward, msc_siglevel)
+    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
+    , freq_range_idx, max_freq_offset_idx, H &
+    , coh_nrow, coh_ncol, totFreqByCol, total_offsets &
+    , col_order, hPredBreak, hIdx, nhIdx)
 
     integer :: ndata, ndata2, npred, nblocks &
       , block_size, block_size2, k, nFFT, nFFT2 &
-      , freq_range_idx(2), max_freq_offset_idx, calc_type &
+      , freq_range_idx(2), max_freq_offset_idx &
       , block_incr, block_incr2, dstart_idx, dend_idx &
-      , dstart_idx2, dend_idx2, is_forward &
-      , fRatio, dtRatio, use_zero, use_off, nOff &
-      , coh_nrow, coh_ncol, total_offsets &
-      , wrktot(npred), totFreqByCol(coh_ncol) &
-      , wrk3(coh_nrow, coh_ncol), offIdxAll(coh_nrow) &
-      , i, j, p, desCol(npred), t
-    integer, allocatable :: indicator(:, :, :), col_order(:, :, :) &
-      , wrk(:, :), wrk2(:)
+      , dstart_idx2, dend_idx2  &
+      , fRatio, dtRatio, use_off, nOff &
+      , total_offsets &
+      , coh_nrow, coh_ncol &
+      , col_order(coh_nrow, coh_ncol, npred) &
+      , totFreqByCol(coh_ncol) &
+      , offIdxAll(coh_nrow) &
+      , idxAll(coh_nrow), negIdxAll(3), nNegOff, nPosOff &
+      , i, j, p, desCol(npred), t, wrk2(coh_nrow) &
+      , hIdx(nhIdx), nhIdx, nhSubIdx, hPredBreak(npred+1)
+    integer, allocatable :: freqIdx2(:), negOffIdx(:), posOffIdx(:) &
+      , hSubIdx(:)
     real*8 :: d1(ndata), d2(ndata2, npred), overlap &
-      , dt, dt2, nw, nw2, freq(nFFT/2+1), msc_siglevel, level
-    real*8, allocatable :: s1(:), s2(:), offsets(:)
-    complex*16, allocatable :: yk1(:, :, :), yk2(:, :, :, :), coh(:, :, :) &
-      , H(:, :), design(:, :), Y(:)
+      , dt, dt2, nw, nw2, freq(nFFT/2+1)
+    real*8, allocatable :: s1(:), s2(:), tmpErr(:), tmpSvd_Ev(:)
+    complex*16 :: H(coh_ncol, total_offsets)
+    complex*16, allocatable :: yk1(:, :, :), yk2(:, :, :, :) &
+      , design(:, :), Y(:), Htmp(:)
 
-    coh_nrow = 2*max_freq_offset_idx + 1
-    coh_ncol = freq_range_idx(2) - freq_range_idx(1) + 1
+    ! fRatio = (nFFT2 *dt2) / (nFFT * dt)
+    dtRatio = dt / dt2 ! I dont think this gets used...
 
-    allocate(offsets(coh_nrow))
-    allocate(coh(coh_nrow, coh_ncol, npred))
-    allocate(indicator(coh_nrow, coh_ncol, npred) &
-      , col_order(coh_nrow, coh_ncol, npred), wrk(coh_nrow, npred) &
-      , wrk2(coh_nrow))
-
-    fRatio = nFFT2 / nFFT
-    dtRatio = dt / dt2
-
-  ! allows as many offsets as possible (which is coh_nrow) ... sort of..
-    if (nOff .eq. -1) then
-      nOff = coh_nrow
-    end if
-
-    ! setting up block indices
+    ! setting up block indices for eigencoefficient calcs
     block_incr = floor(block_size * (1.0D0 - overlap))
     block_incr2 = block_incr * dtRatio
+  ! these two sizes should be the same...
     nblocks = min(size( (/ (j, j = 1, ndata - block_size + 1, block_incr) /) ) &
       , size( (/ (j, j = 1, ndata2 - block_size2 + 1, block_incr2) /) ))
 
-    level = dinvnorm(msc_siglevel)
-    level = level * (1.0D0 / dsqrt(dble(nblocks)))
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! here we need to determine exactly what frequencies we're going to use
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    do i = 1, npred
-      call block_coh(d1, d2(:, i), ndata, ndata2, block_size, block_size2 &
-        , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, coh(:, :, i) &
-        , freq, offsets, freq_range_idx, max_freq_offset_idx &
-        , calc_type, 1, is_forward)
-
-      call msc_indicator(realpart(coh(:, :, i)), coh_nrow, coh_ncol &
-        , col_order(:, :, i), level, nOff)
-    end do
-
-
-    ! setup the fft work matrices and dpss vectors
+  ! setup the fft work matrices and dpss vectors
     call fft_setup(nFFT, 1)
     call fft_setup(nFFT2, 2)
     call dpss_setup(block_size, nw, k, nFFT, 1)
@@ -397,6 +373,7 @@ contains
 
     allocate(s1(nfreq), s2(nfreq2))
     allocate(yk1(nfreq, k, nblocks), yk2(nfreq2, k, npred, nblocks))
+    allocate(freqIdx2(nfreq2))
 
   ! I need to test this ... <le sigh>
   ! calculate all the eigencoefficients
@@ -406,50 +383,98 @@ contains
       dstart_idx2 = i*block_incr2 + 1
       dend_idx2 = i*block_incr2 + block_size2 - 1
 
+    ! store the eigencoefficients by block for the response
       call weighted_eigencoef(d1(dstart_idx:dend_idx), block_size, dt &
        , nw, k, yk1(:, :, i), s1, nFFT, 1)
+    ! store the eigencoefficients by block and predictor for the inputs
       do j = 1, npred
         call weighted_eigencoef(d2(dstart_idx2:dend_idx2, j) &
-          , block_size2, dt2 &
-         , nw2, k, yk2(:, :, j, i), s2, nFFT2, 2)
+          , block_size2, dt2, nw2, k, yk2(:, :, j, i), s2, nFFT2, 2)
       end do
     end do
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! setup the design matrices and allocate H(:, :)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! determine the number of predictors, including offsets (in total needed)
-    totFreqByCol = 0
-    offIdxAll = (/ (i, i = 1, coh_nrow) /) - (max_freq_offset_idx + 1)
-    do i = 1, npred
-      wrk(:, i) = any(col_order(:, :, i) > -1, 2)
-      wrktot(i) = sum(wrk(:, i))
-      total_offsets = total_offsets + wrktot(i)
+  ! offsets to be used
+  !! provided as a function argument
+    ! call numberOffsets(col_order, total_offsets, totFreqByCol &
+    !   , coh_nrow, coh_ncol, npred) ! all of these are passed
 
-      wrk3 = col_order(:, :, i) > -1
-      totFreqByCol = totFreqByCol + sum(wrk3, 1)
-    end do
+    offIdxAll = (/ (i, i = freq_range_idx(1), freq_range_idx(2)) /) &
+      - (max_freq_offset_idx + 1)
 
-    allocate(H(nfreq, total_offsets))
+    ! idxAll = (/ (i, i = 1, coh_nrow) /) ! delete this
+    idxAll = (/ (i, i = freq_range_idx(1), freq_range_idx(2)) /)
 
-!!! NEED TO DEAL WITH negative frequencies. yay.
+    !allocate(H(size(idxAll), total_offsets)) ! gets passed in
+    H = dcmplx(0.0D0, 0.0D0) ! initialize this
+    allocate(Y(nblocks*k))
+
     do j = 1, coh_ncol
+      ! no significant frequencies to use at this central frequency
+      if (totFreqByCol(j) == 0) then
+        cycle
+      end if
+
+      ! design matrix changes size based on
       allocate( design( nblocks*k, totFreqByCol(j) ) )
-      ! this might not work with 1 predictor ...
+
+      ! vector containing start and end indices for putting
+      ! covariates from each predictor
       desCol = (/ 1, (0, t = 1, npred) /)
       do p = 1, npred
-        wrk2 = col_order(:, j, p) > -1
+        ! which offsets for the j-th column and p-th predictor should be used
+        wrk2 = col_order(:, j, p)
+        ! the number of predictors to assign indices to the design matrix
         desCol(p+1) = desCol(p) + size(pack(offIdxAll, wrk2 > 0))
+
+!!! How are we dealing with fRatio here?
+!!! I'm not sure we actually are ... as of yet.
+        ! determine number of offsets that are at negative frequencies
+          ! and therefore require conjugation :: X(-f) = X*(f)
+        nNegOff = size(pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll .le. 0) ))
+        nPosOff = size(pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ))
+        allocate(negOffIdx(nNegOff), posOffIdx(nPosOff))
+        negOffIdx = ( fRatio * &
+          (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll .le. 0) ) - 1) ) + 1
+        posOffIdx = (fRatio * &
+          (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ) - 1) ) + 1
+
+        ! these are columns of the design matrix which will have the -ve offs
+        negIdxAll = (/ 1, nNegOff, desCol(p+1) - desCol(p) /)
+
         do i = 0, nblocks-1
-          design((i*k+1):((i+1)*k), desCol(p):desCol(p+1)) = &
-            transpose(yk2(pack(offIdxAll, wrk2 > 0), :, p, i+1))
-          if (i .eq. 0) then
-            Y((i*k+1):((i+1)*k)) = yk()
+          ! if there *are* offsets at negative frequencies:
+          if (negIdxAll(2) .ne. 0) then
+            design((i*k+1):((i+1)*k), desCol(p):(desCol(p) + nNegOff - 1)) = &
+              conjg(transpose(yk2(negOffIdx, :, p, i+1)))
           end if
+          ! if there are positive offset frequencies
+          if (negIdxAll(3) .ne. negIdxAll(2)) then
+            design((i*k+1):((i+1)*k), (desCol(p)+nNegOff):(desCol(p+1)-1)) = &
+              transpose(yk2(posOffIdx, :, p, i+1))
+          end if
+          if (i .eq. 0) then
+            ! response eigencoefficients should be put in here:
+            Y((i*k+1):((i+1)*k)) = yk1(freq_range_idx(1) + j - 1, :, i+1)
+          end if
+
+          deallocate(negOffIdx, posOffIdx)
         end do
       end do
 
-      deallocate(design)
+      allocate(hSubIdx(totFreqByCol(j)), Htmp(totFreqByCol(j)))
+
+      call findHidx(col_order(:, j, p), hIdx, coh_nrow, nhIdx, hSubIdx &
+        , totFreqByCol(j))
+
+      call zSvdRegression(Y, design, nblocks*k, totFreqByCol(j), Htmp &
+        , tmpErr, tmpSvd_Ev)
+
+      H(j, hSubIdx) = Htmp
+
+      deallocate(design, hSubIdx, Htmp)
     end do
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -769,6 +794,28 @@ contains
     end do
   end subroutine zSvdRegression
 
+  subroutine findHidx(col, hIdx, nCol, nhIdx, idxSub, nSub)
+  ! col - contains the indicator column of MSC matrix
+  ! hIdx - contains the indices of all the unique frequencies used in the
+  ! regression
+  ! idxSub - contains the index of the column of H in which to store coefs
+    integer :: col(nCol), hIdx(nhIdx), idxAll(nCol), idxSub(nsub) &
+      , ncol, nhIdx, nSub, i, j
+
+    idxAll = (/ (i, i = 1, nCol) /)
+    idxSub = pack(idxAll, col > 0 )
+    j = 1
+
+    do i = 1, nSub
+      do j = j, nhIdx
+        if (idxSub(i) == hIdx(j)) then
+          idxSub(i) = j
+          exit
+        end if
+      end do
+    end do
+  end subroutine findHidx
+
 
   subroutine msc_indicator(msc, nrow, ncol, ind, level, nOff)
   ! determines if the mcs's are local maxes (by column, i.e., central freq)
@@ -777,13 +824,13 @@ contains
     real*8 :: msc(:, :), cohLmax(nrow, ncol), level
     integer :: i, j, ind(:, :), nrow, ncol, nOff, cmax(ncol)
 
-    ind(:, :) = -1
+    ind(:, :) = 0
     cohLmax(:, :) = -1
 
   ! only keep the local maxes above the cutoff.
     do i = 2, nrow-1
       do j = 1, ncol
-        if (msc(i,j) > level .and. msc(i, j) > msc(i-1, j) .and. &
+        if (msc(i,j) >= level .and. msc(i, j) > msc(i-1, j) .and. &
           msc(i, j) > msc(i+1, j)) then
           cohLmax(i, j) = msc(i, j)
         end if
@@ -791,13 +838,43 @@ contains
     end do
 
     do i = 1, nOff
-      cmax = maxloc(msc, dim = 1, mask = (ind < 0 .and. cohLmax > 0))
+      cmax = maxloc(msc, dim = 1, mask = (ind .eq. 0 .and. cohLmax > 0))
       do j = 1, ncol
         if (cmax(j) .eq. 0) cycle
         ind(cmax(j), j) = i
       end do
     end do
   end subroutine msc_indicator
+
+  subroutine numberOffsets(col_order, total_offsets, totFreqByCol &
+    , nrow, ncol, npred)
+    integer :: total_offsets, totFreqByCol(ncol), wrktot(npred) &
+      , wrk3(nrow, ncol), i, nrow, ncol, npred &
+      , col_order(nrow, ncol, npred), wrk(nrow, npred)
+
+      ! determine the number of predictors, including offsets (in total needed)
+        ! number of total unique frequencies
+        totFreqByCol = 0
+
+        do i = 1, npred
+          ! vector indicating which rows (offsets) have values to use
+          wrk(:, i) = any(col_order(:, :, i) > -1, 2)
+          ! the total number of unique offsets (per predictor)
+          wrktot(i) = sum(wrk(:, i))
+          total_offsets = total_offsets + wrktot(i)
+
+        ! gets info for each design matrix
+          ! indicator matrix - contains only 1's or 0's
+          wrk3 = col_order(:, :, i) > -1
+          ! total frequencies needed by center frequency - vector of length n_col
+          totFreqByCol = totFreqByCol + sum(wrk3, 1)
+        end do
+  end subroutine
+
+  subroutine setFreqIdx(freqIdx, fRatio)
+    integer :: fRatio, freqIdx(nfreq2), i
+    freqIdx = (/ (i, i = 1, nfreq2, fRatio) /)
+  end subroutine setFreqIdx
 
   subroutine msc2norm(msc, nrow, ncol, dof)
     integer :: nrow, ncol, i, j, dof

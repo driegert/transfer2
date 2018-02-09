@@ -1,3 +1,5 @@
+#' Tests whether I can actually call Fortran code.
+#'
 #' @export
 #' @useDynLib transfer2
 fortTest <- function(x){

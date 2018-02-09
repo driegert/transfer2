@@ -259,7 +259,7 @@ tf <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
 #' 
 #' @param c a real-valued vector of the coherence
 #' @param k the number of tapers used
-#' @parma msc a \code{logical} indicating whether the coherence passed was actually the MSC
+#' @param msc a \code{logical} indicating whether the coherence passed was actually the MSC
 #' 
 #' @export
 mscQTransform <- function(c, k, msc = TRUE){

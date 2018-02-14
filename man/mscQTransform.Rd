@@ -10,6 +10,8 @@ mscQTransform(c, k, msc = TRUE)
 \item{c}{a real-valued vector of the coherence}
 
 \item{k}{the number of tapers used}
+
+\item{msc}{a \code{logical} indicating whether the coherence passed was actually the MSC}
 }
 \description{
 Converts estimates of MSC to an almost Gaussian distribution

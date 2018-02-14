@@ -19,28 +19,28 @@ subroutine callblockcoh(d1, d2, ndata, ndata2, block_size, block_size2 &
 end subroutine callblockcoh
 
 
-subroutine calltf(d1, d2, ndata, ndata2, npred, block_size &
-    , block_size2, overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2 &
-    , fRatio, freq_range_idx, max_freq_offset_idx, H &
-    , coh_nrow, coh_ncol, totFreqByCol, total_offsets &
-    , col_order, hPredBreak, hIdx, nhIdx)
-  use mtm_mod
-  implicit none
-
-  integer :: ndata, ndata2, npred, block_size, block_size2, k &
-    , nFFT, nFFT2, fRatio, freq_range_idx(2), max_freq_offset_idx &
-    , coh_nrow, coh_ncol, totFreqByCol(npred), total_offsets
-    , col_order(coh_nrow, coh_ncol, npred), hPredBreak(npred+1) &
-    , hIdx(nhIdx), nhIdx
-  real*8 :: overlap, dt, dt2, nw, nw2
-  complex*16 :: H(coh_ncol, total_offsets)
-
-  call tf(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
-    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
-    , freq_range_idx, max_freq_offset_idx, H &
-    , coh_nrow, coh_ncol, totFreqByCol, total_offsets &
-    , col_order, hPredBreak, hIdx, nhIdx)
-end subroutine calltf
+! subroutine calltf(d1, d2, ndata, ndata2, npred, block_size &
+!     , block_size2, overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2 &
+!     , fRatio, freq_range_idx, max_freq_offset_idx, H &
+!     , coh_nrow, coh_ncol, totFreqByCol, total_offsets &
+!     , col_order, hPredBreak, hIdx, nhIdx)
+!   use mtm_mod
+!   implicit none
+!
+!   integer :: ndata, ndata2, npred, block_size, block_size2, k &
+!     , nFFT, nFFT2, fRatio, freq_range_idx(2), max_freq_offset_idx &
+!     , coh_nrow, coh_ncol, totFreqByCol(npred), total_offsets
+!     , col_order(coh_nrow, coh_ncol, npred), hPredBreak(npred+1) &
+!     , hIdx(nhIdx), nhIdx
+!   real*8 :: overlap, dt, dt2, nw, nw2
+!   complex*16 :: H(coh_ncol, total_offsets)
+!
+!   call tf(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
+!     , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
+!     , freq_range_idx, max_freq_offset_idx, H &
+!     , coh_nrow, coh_ncol, totFreqByCol, total_offsets &
+!     , col_order, hPredBreak, hIdx, nhIdx)
+! end subroutine calltf
 
 subroutine callMscIndicator(msc, nrow, ncol, ind, level, nOff)
   use mtm_mod

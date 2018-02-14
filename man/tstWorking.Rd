@@ -9,3 +9,6 @@ tstWorking()
 \description{
 Tests to make sure that Fortran calls are working (again)
 }
+\details{
+The answers are different due to where sqrt(dt) (?) gets taken into account
+}

@@ -961,4 +961,9 @@ contains
   204   dinvnorm=z
     return
   end function dinvnorm
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!! Testing section !!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 end module mtm_mod

@@ -10,6 +10,5 @@ tstWeightedEigenCoef(d1 = NULL, d2 = NULL)
 Should get the same answer as from multitaper in R
 }
 \details{
-Looks good - differences are a result of the implementation of the FFT's between 
-R and fftpack5 that I'm using in Fortran - differences on the order of 1e-14 at most.
+Less good - differences on the order of 1e-7 ...
 }

@@ -2,6 +2,8 @@
 
 #' Tests to make sure that Fortran calls are working (again)
 #' 
+#' @details The answers are different due to where sqrt(dt) (?) gets taken into account
+#' 
 #' @export
 #' @useDynLib transfer2
 tstWorking <- function(){
@@ -36,7 +38,7 @@ tstTaperData <- function(){
   
   v1 <- multitaper::dpss(n = n1, k = k, nw = nw, returnEigenvalues = TRUE)
   v2 <- multitaper::dpss(n = n2, k = k, nw = nw, returnEigenvalues = TRUE)
-  
+
   tpr1 <- apply(v1$v, 2, "*", d1)
   tpr2 <- apply(v2$v, 2, "*", d2)
   
@@ -93,8 +95,7 @@ tstEigenCoef <- function(){
 #' 
 #' Should get the same answer as from multitaper in R
 #' 
-#' @details Looks good - differences are a result of the implementation of the FFT's between 
-#' R and fftpack5 that I'm using in Fortran - differences on the order of 1e-14 at most.
+#' @details Less good - differences on the order of 1e-7 ... 
 #' 
 #' @export
 #' @useDynLib transfer2
@@ -143,6 +144,122 @@ tstWeightedEigenCoef <- function(d1 = NULL, d2 = NULL){
   print(range(Im(wteig2 - outyk2)))
 }
 
-tstAdaptiveWeights <- function(){
+#' @export
+#' @useDynLib transfer2
+tstAdaptiveWeights <- function(d1 = NULL, d2 = NULL){
+  if (is.null(d1)){
+    d1 <- rnorm(100, mean = 10, sd = 2)
+  }
   
+  if (is.null(d1) || length(d2) != 2*length(d1)){
+    d2 <- rnorm(2*length(d1), mean = 5, sd = 0.5)
+  }
+  
+  nw <- 5; k <- 9
+  dt1 <- 2; dt2 <- 1; dtRatio <- dt1/dt2
+  n1 <- length(d1); n2 <- length(d2)
+  nFFT1 <- 2^(floor(log2(n1))+2); nFFT2 <- nFFT1 * dtRatio
+  v1 <- var(d1); v2 <- var(d2)
+  
+  
+  s1 <- multitaper::spec.mtm(d1, nw = nw, k = k, deltat = dt1, dtUnits = "second", nFFT = nFFT1
+                             , Ftest = TRUE, returnInternals = TRUE, plot = FALSE, centre = "none")
+  s2 <- multitaper::spec.mtm(d2, nw = nw, k = k, deltat = dt2, dtUnits = "second", nFFT = nFFT2
+                             , Ftest = TRUE, returnInternals = TRUE, plot = FALSE, centre = "none")
+  
+  out <- .Fortran("tstAdaptiveWeights", d1 = as.double(d1), d2 = as.double(d2)
+                  , n1 = as.integer(n1), n2 = as.integer(n2)
+                  , m1 = as.integer(nFFT1), m2 = as.integer(nFFT2)
+                  , yk1 = complex( (nFFT1/2+1) * k ), yk2 = complex( (nFFT2/2+1) * k )
+                  , dt1 = as.double(dt1), dt2 = as.double(dt2)
+                  , k = as.integer(k), nw = as.double(nw)
+                  , dk1 = as.double((nFFT1/2+1) * k), dk2 = as.double((nFFT2/2+1) * k)
+                  , var1 = as.double(v1), var2 = as.double(v2))
+  
+  out
+}
+
+
+#' @export
+#' @useDynLib transfer2
+eigenCoefWt <- function(){
+  d1 <- rnorm(100, mean = 10, sd = 2)
+  nw <- 5; k <- 9
+  dt1 <- 2; dt2 <- 1; dtRatio <- dt1/dt2
+  n1 <- length(d1); #n2 <- length(d2)
+  nFFT1 <- 2^(floor(log2(n1))+2); #nFFT2 <- nFFT1 * dtRatio
+  v1 <- var(d1); #v2 <- var(d2)
+  out <- .Fortran("tstEiegenCoefWt", d = as.double(d1)
+                  , ndata = as.integer(length(d1))
+                  , dt = as.double(dt1)
+                  , nw = as.double(nw)
+                  , k = as.integer(k)
+                  , yk = complex(nFFT1*k)
+                  , spec = complex(nFFT1/2+1)
+                  , nFFT = as.integer(nFFT1), id = as.integer(1))
+}
+
+# weights are exactly the same if I use multitaper yk's, v's, and ev's
+# i.e., weight calculation is correct.
+#' @export
+testWeightsWrapper <- function(d1 = NULL, d2 = NULL){
+  if (is.null(d1)){
+    d1 <- rnorm(100, mean = 10, sd = 2)
+  }
+  
+  if (is.null(d1) || length(d2) != 2*length(d1)){
+    d2 <- rnorm(2*length(d1), mean = 5, sd = 0.5)
+  }
+  
+  nw <- 5; k <- 9
+  dt1 <- 2; dt2 <- 1; dtRatio <- dt1/dt2
+  n1 <- length(d1); n2 <- length(d2)
+  nFFT1 <- 2^(floor(log2(n1))+2); nFFT2 <- nFFT1 * dtRatio
+  var1 <- var(d1); var2 <- var(d2)
+  
+  s1 <- multitaper::spec.mtm(d1, nw = nw, k = k, deltat = dt1, dtUnits = "second", nFFT = nFFT1
+                             , Ftest = TRUE, returnInternals = TRUE, plot = FALSE, centre = "none")
+  s2 <- multitaper::spec.mtm(d2, nw = nw, k = k, deltat = dt2, dtUnits = "second", nFFT = nFFT2
+                             , Ftest = TRUE, returnInternals = TRUE, plot = FALSE, centre = "none")
+  
+  out <- testweights(d1, s1$mtm$eigenCoefs, k = k, dt = dt1, var = var1, nFFT = nFFT1, nw = nw,
+                     eval = s1$mtm$dpss$eigen)
+  
+  dkFort <- matrix(out$dk, ncol = k, nrow = nFFT1/2+1)
+  dkMtm <- s1$mtm$eigenCoefWt
+  
+  print(range(dkMtm - dkFort))
+}
+
+#' @export
+#' @useDynLib transfer2
+tstEigenvals <- function(d1 = NULL, d2 = NULL){
+  if (is.null(d1)){
+    d1 = rnorm(100, mean = 10, sd = 2)
+  }
+  
+  if (is.null(d1) || length(d2) != 2*length(d1)){
+    d2 <- rnorm(2*length(d1), mean = 5, sd = 0.5)
+  }
+  
+  nw <- 5; k <- 9
+  dt1 <- 2; dt2 <- 1; dtRatio <- dt1/dt2
+  n1 <- length(d1); n2 <- length(d2)
+  nFFT1 <- 2^(floor(log2(n1))+2); nFFT2 <- nFFT1 * dtRatio
+  var1 <- var(d1); var2 <- var(d2)
+  
+  s1 <- multitaper::spec.mtm(d1, nw = nw, k = k, deltat = dt1, dtUnits = "second", nFFT = nFFT1
+                             , Ftest = TRUE, returnInternals = TRUE, plot = FALSE, centre = "none")
+  s2 <- multitaper::spec.mtm(d2, nw = nw, k = k, deltat = dt2, dtUnits = "second", nFFT = nFFT2
+                             , Ftest = TRUE, returnInternals = TRUE, plot = FALSE, centre = "none")
+  
+  out <- .Fortran("tstEigenvals", n1 = as.integer(n1), n2 = as.integer(n2)
+                  , k = as.integer(k)
+                  , nw = as.double(nw), m1 = as.integer(nFFT1), m2 = as.integer(nFFT2)
+                  , lambda1 = double(k), lambda2 = double(k))
+  
+  print("Series1:")
+  print(s1$mtm$dpss$eigen - out$lambda1, digits = 15)
+  print("Series2:")
+  print(s2$mtm$dpss$eigen - out$lambda2, digits = 15)
 }

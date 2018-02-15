@@ -9,6 +9,7 @@ tf <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
                , dt = 1, dt2 = dt, nw = 4, nw2 = NULL, k = 7
                , nFFT = NULL, nFFT2 = nFFT
                , freqRange = NULL, maxFreqOffset = 0, nOff = -1
+               , forceZeroFreq = TRUE
                , sigLevel = 0.99
                , name1 = "d1", name2 = "d2"){
   # You need to be hella careful with nFFT and nFFT2:
@@ -34,8 +35,8 @@ tf <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
   }
   
   # if nw2 is null, make the effective W's the same
+  w1 <- nw / blockSize
   if (is.null(nw2)){
-    w1 <- nw / blockSize
     nw2 <- w1*blockSize2
   }
   
@@ -43,7 +44,7 @@ tf <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
   
   # this if-statement is here because there were issues when freqRange == NULL
   if (is.null(freqRange)){
-    warnings("freqRange == NULL: Setting freqRange to positive band and maxFreqOffset to 0.")
+    warnings("freqRange == NULL: Setting freqRange to full positive band and maxFreqOffset to 0.")
     freqRange <- c(0, 1/(2*dt))
     maxFreqOffset <- 0
     
@@ -56,9 +57,11 @@ tf <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
   maxOffIdx <- ceiling(maxFreqOffset / df)
   freq <- seq(0, 1/(2*dt), 1/(nFFT*dt))
   
-  numRow = 2*maxOffIdx + 1
+  numRow <- 2*maxOffIdx + 1
   numCol = freqRangeIdx[2] - freqRangeIdx[1] + 1
-  nblocks = ndata / (blockSize * (1 - overlap))
+  zeroFreq <- maxOffIdx + 1
+  zeroDeadZone <- ceiling((w1 / 3) / df)
+  nblocks <- ndata / (blockSize * (1 - overlap))
   
   # determine which frequencies get used
   level <- qnorm(sigLevel) / sqrt(nblocks)
@@ -86,20 +89,33 @@ tf <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
                      , level = as.double(level), nOff = as.integer(nOff))
     
     ind[, , i] <- matrix(out2$ind, nrow = numRow, ncol = numCol)
+    
+    
+    # make the zero-offset a "significant" frequency and implement a deadzone around it.
+    if (forceZeroFreq){
+      ind[(zeroFreq - zeroDeadZone):(zeroFreq+zeroDeadZone), , i] <- 0
+      ind[zeroFreq, , i] <- 1
+    }
   }
   
+  # rather than a ranking, just replace with 1's as indicators
   ind[ind > 0] <- 1 # just replace this to get number of frequencies used per central freq.
   
-  ## need to take into account the use of the 0 frequency (optionally included?)
+  # this whole piece gives the significant frequencies for all predictors in a single
+  # vector, hIdx
+  # hPredBreak gives the start and end+1 for where each predictor series lives
+  # e.g., if pred 1 had 4, 9, 16; pred 2 had 2, 5; and pred 3 had 1, 9, 10
+  # hIdx = c(1,4,9,16, 2,5, 1,9,10); hPredBreak = c(1, 5, 7, 10)
   hIdx <- c()
   hPredBreak <- 1
   for (i in 1:ncol(d2)){
     tmp <- (1:numRow)[apply(ind[, , i], 1, sum) > 0]
-    hPredBreak[i+1] <- hPredBreak[i] + length(tmp) - 1
-    hIdx[ hPredBreak[i]:hPredBreak[i+1] ] <- tmp
+    hPredBreak[i+1] <- hPredBreak[i] + length(tmp)
+    hIdx[ hPredBreak[i]:(hPredBreak[i+1] - 1) ] <- tmp
   }
   
-  totFreqByCol <- apply(2, hIdx, sum)
+  # need maybe one of these, but by predictor? - use this to get the idx's in fortran code.. maybe... 
+  totFreqByCol <- apply(2, ind, sum)
   
   # hFreq <- out$offsets[hIdx]
   

@@ -417,6 +417,10 @@ contains
         cycle
       end if
 
+      ! holds the indices of H for this central frequency that will contain
+      ! values
+      allocate(hSubIdx(totFreqByCol(j)), Htmp(totFreqByCol(j)))
+
       ! design matrix changes size based on
       allocate( design( nblocks*k, totFreqByCol(j) ) )
 
@@ -456,7 +460,7 @@ contains
               transpose(yk2(posOffIdx, :, p, i+1))
           end if
           if (i .eq. 0) then
-            ! response eigencoefficients should be put in here:
+            ! response eigencoefficients
             Y((i*k+1):((i+1)*k)) = yk1(freq_range_idx(1) + j - 1, :, i+1)
           end if
 
@@ -464,7 +468,7 @@ contains
         end do
       end do
 
-      allocate(hSubIdx(totFreqByCol(j)), Htmp(totFreqByCol(j)))
+
 
       call findHidx(col_order(:, j, p), hIdx, coh_nrow, nhIdx, hSubIdx &
         , totFreqByCol(j))
@@ -478,7 +482,7 @@ contains
     end do
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! call the svd regression code
+  ! cleanup
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call dpss_cleanup(1)
     call dpss_cleanup(2)

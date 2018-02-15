@@ -466,12 +466,13 @@ contains
 
           deallocate(negOffIdx, posOffIdx)
         end do
+        call findHidx(col_order(:, j, p) &
+          , hIdx(hPredBreak(p):(hPredBreak(p+1)-1))
+          , coh_nrow &!, size(hPredBreak(p):(hPredBreak(p+1)-1)) &
+          , hSubIdx((sum(totFreqByColByPred(1:(p), j))+1):(sum(totFreqByColByPred(1:(p+1), j)))) &
+          , hPredBreak(p)-1) !, totFreqByColByPred(p, j))
       end do
 
-
-
-      call findHidx(col_order(:, j, p), hIdx, coh_nrow, nhIdx, hSubIdx &
-        , totFreqByCol(j))
 
       call zSvdRegression(Y, design, nblocks*k, totFreqByCol(j), Htmp &
         , tmpErr, tmpSvd_Ev)
@@ -798,13 +799,16 @@ contains
     end do
   end subroutine zSvdRegression
 
-  subroutine findHidx(col, hIdx, nCol, nhIdx, idxSub, nSub)
+  subroutine findHidx(col, hIdx, ncol, idxSub, baseIdx)
+    ! (col, hIdx, nCol, nhIdx, idxSub, nSub) <- old arguments
+    ! integer :: col(nCol), hIdx(nhIdx), idxAll(nCol), idxSub(nsub) &
+    !  , ncol, nhIdx, nSub, i, j <- old integer declaration
   ! col - contains the indicator column of MSC matrix
   ! hIdx - contains the indices of all the unique frequencies used in the
   ! regression
   ! idxSub - contains the index of the column of H in which to store coefs
-    integer :: col(nCol), hIdx(nhIdx), idxAll(nCol), idxSub(nsub) &
-      , ncol, nhIdx, nSub, i, j
+    integer :: col(:), hIdx(:), idxAll(ncol), idxSub(:), baseIdx &
+      , ncol, i, j
 
     idxAll = (/ (i, i = 1, nCol) /)
     idxSub = pack(idxAll, col > 0 )
@@ -813,7 +817,7 @@ contains
     do i = 1, nSub
       do j = j, nhIdx
         if (idxSub(i) == hIdx(j)) then
-          idxSub(i) = j
+          idxSub(i) = j + baseIdx
           exit
         end if
       end do

@@ -107,15 +107,18 @@ tf <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
   # e.g., if pred 1 had 4, 9, 16; pred 2 had 2, 5; and pred 3 had 1, 9, 10
   # hIdx = c(1,4,9,16, 2,5, 1,9,10); hPredBreak = c(1, 5, 7, 10)
   hIdx <- c()
+  totFreqByColByPred <- matrix(0, nrow = ncol(d2), ncol = numCol)
   hPredBreak <- 1
   for (i in 1:ncol(d2)){
     tmp <- (1:numRow)[apply(ind[, , i], 1, sum) > 0]
     hPredBreak[i+1] <- hPredBreak[i] + length(tmp)
     hIdx[ hPredBreak[i]:(hPredBreak[i+1] - 1) ] <- tmp
+    
+    totFreqByColByPred[i, ] <- apply(ind[, , i], 2, sum)
   }
   
-  # need maybe one of these, but by predictor? - use this to get the idx's in fortran code.. maybe... 
-  totFreqByCol <- apply(2, ind, sum)
+  # this gives the total number of frequencies used in all predictors for each central frequency
+  totFreqByCol <- apply(ind, 2, sum)
   
   # hFreq <- out$offsets[hIdx]
   

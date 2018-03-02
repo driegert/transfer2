@@ -4,7 +4,7 @@
 \alias{tf}
 \title{Estimates the transfer functions}
 \usage{
-tf(d1, d2, ndata = length(d1), ndata2 = length(d2), blockSize = ndata,
+tf(d1, d2, ndata = length(d1), ndata2 = dim(d2)[1], blockSize = ndata,
   blockSize2 = blockSize, overlap = 0, dt = 1, dt2 = dt, nw = 4,
   nw2 = NULL, k = 7, nFFT = NULL, nFFT2 = nFFT, freqRange = NULL,
   maxFreqOffset = 0, nOff = -1, forceZeroFreq = TRUE, sigLevel = 0.99,

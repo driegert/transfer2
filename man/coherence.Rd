@@ -5,7 +5,7 @@
 \title{Calculate the multitaper coherence estimate}
 \usage{
 coherence(d1, d2, ndata = length(d1), ndata2 = length(d2),
-  blockSize = ndata, blockSize2 = blockSize, overlap = 0, dt = 1,
+  blockSize = ndata, blockSize2 = ndata2, overlap = 0, dt = 1,
   dt2 = dt, nw = 4, nw2 = NULL, k = 7, nFFT = NULL, nFFT2 = nFFT,
   freqRange = NULL, maxFreqOffset = 0, calcType = 1, forward = 1,
   conv_msc2norm = 0, name1 = "d1", name2 = "d2")
@@ -15,20 +15,28 @@ coherence(d1, d2, ndata = length(d1), ndata2 = length(d2),
 
 \item{d2}{A \code{numeric} vector containing the second series (same length as \code{d1}).}
 
-\item{ndata}{The total length of d1 or d2.}
+\item{ndata}{The total length of d1.}
 
-\item{blockSize}{The length of a single block to use (if blocking)}
+\item{blockSize}{The length of a single block in series d1 to use (if blocking).}
+
+\item{blockSize2}{The length of a single block in series d2 to use (if blocking).}
 
 \item{overlap}{A \code{numeric} value in the range [0, 1) indicating the proporation of 
 overlap between neighbouring blocks.}
 
-\item{dt}{The sampling rate in seconds.}
+\item{dt}{The sampling of rate of series d1 in seconds.}
 
-\item{nw}{time-bandwidth parameter for multitaper}
+\item{dt2}{The sampling of rate of series d2 in seconds.}
+
+\item{nw}{time-bandwidth parameter for multitaper (series d1)}
+
+\item{nw2}{time-bandwidth parameter for multitaper (series d2)}
 
 \item{k}{number of tapers to use (k < 2*nw)}
 
-\item{nFFT}{the number of frequency bins to use (nFFT > 2*ndata)}
+\item{nFFT}{the number of frequency bins to use for series d1 (nFFT > 2*ndata)}
+
+\item{nFFT2}{the number of frequency bins to use for series d2 (nFFT2 > 2*ndata2)}
 
 \item{freqRange}{A vector with 2 elements containing the start and end frequencies (in Hz) 
 over which to calculate the coherence.}
@@ -47,15 +55,22 @@ across blocks, then calculate the coherency;
 \item{forward}{An \code{integer} indicating whether the forward (1) or reverse (0) coherence
 should be calculated.}
 
+\item{conv_msc2norm}{An \code{integer} indicating whether the MSC should be converted 
+to a Normal distribution (1) or returned as the MSC (0).}
+
 \item{name1}{a \code{character} string giving the name of the first data set used.}
 
 \item{name2}{a \code{character} string giving the name of the second data set used.}
+
+\item{ndata}{The total length of d2.}
 }
 \description{
 Calculates the magnitude squared coherence estimate
 }
 \details{
 Things to think about: 1) blockSize and overlap are going to be very important considerations... 
-Need to be careful that "block_incr" in mtm_mod.f95 is (are) being calculated correctly.  I.e., YOU, the user 
-need to be cogniscent of the values you're using -_- .
+Need to be careful that "block_incr" in mtm_mod.f95 is (are) being calculated correctly.
+I.e., YOU, the user need to be cogniscent of the values you're using -_- .
+
+If you don't set nw2, this function makes the effective w's the same (i.e., B1 = B2 in BT = NW)
 }

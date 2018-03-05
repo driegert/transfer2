@@ -287,10 +287,13 @@ tstcalculatenblocks <- function(ndata = 100, blockSize = 50, blockIncr = 50){
 #' @useDynLib transfer2
 tstcalctfwteigen <- function(d1 = NULL, d2 = NULL, npred = 2){
   if (is.null(d1)){
-    d1 = rnorm(100, mean = 10, sd = 2)
-    d2 <- matrix(c(rnorm(2*length(d1), mean = 5, sd = 0.5)
-                   , rnorm(2*length(d1), mean = 33, sd = 0.1)), ncol = 2)
+    d1 = rnorm(100, mean = 0, sd = 2)
+    d2 <- matrix(c(rnorm(2*length(d1), mean = 0, sd = 0.5)
+                   , rnorm(2*length(d1), mean = 0, sd = 0.1)), ncol = 2)
   }
+  
+  d1 <- as.matrix(read.table("~/school_lab/bin/testing/mtmModTests/d1.dat"))[, 1]
+  d2 <- as.matrix(read.table("~/school_lab/bin/testing/mtmModTests/d2.dat"))
   
   nw <- 5; k <- 9; nw2 = nw
   dt1 <- 2; dt2 <- 1; dtRatio <- dt1/dt2
@@ -407,4 +410,119 @@ tsttf <- function(d1 = NULL, d2 = NULL, dt=1, dt2=dt){
   
   a <- tf(d1 = d1, d2 = as.data.frame(d2), blockSize = length(d1), blockSize2 = 2*length(d1)
           , dt = 2, dt2 = 1, nFFT = nFFT1, nFFT2 = nFFT2)
+}
+
+#' @export
+#' @useDynLib transfer2
+tsttfzero <- function(d1 = NULL, d2 = NULL, dt = 2, dt2 = 1){
+  set.seed(19840331)
+  if (is.null(d1)){
+    # d1 = rnorm(100, mean = 0, sd = 2)
+    # d2 <- matrix(c(rnorm(2*length(d1), mean = 0, sd = 0.5)
+    #                , rnorm(2*length(d1), mean = 0, sd = 0.1)), ncol = 2)
+    d1 <- as.matrix(read.table("~/school_lab/bin/testing/mtmModTests/d1.dat"))[, 1]
+    d2 <- as.matrix(read.table("~/school_lab/bin/testing/mtmModTests/d2.dat"))
+    npred <- 2
+    dt1 <- 2
+    dt2 <- 1
+  }
+  
+  npred <- dim(d2)[2]
+  
+  n1 <- length(d1); n2 <- length(d2) / npred
+  overlap <- 0
+  nw <- 5; k <- 9; nw2 = determineNW2(n1, n2, dt1, dt2, nw)
+  dt1 <- 2; dt2 <- 1; dtRatio <- dt1/dt2
+  nFFT1 <- 2^(floor(log2(n1))+2); nFFT2 <- nFFT1 * dtRatio
+  blockSize <- n1; blockSize2 <- n2
+  fRatio <- determineFreqRatio(dt1, dt2, nFFT1, nFFT2)
+  freqRangeIdx <- c(1, nFFT1/2+1)
+  
+  out <- .Fortran("tsttfzero"
+                  , d1 = as.double(d1)
+                  , d2 = as.double(d2)
+                  , ndata = as.integer(n1)
+                  , ndata2 = as.integer(n2)
+                  , npred = as.integer(npred)
+                  , block_size = as.integer(blockSize)
+                  , block_size2 = as.integer(blockSize2)
+                  , overlap = as.double(overlap)
+                  , dt = as.double(dt1)
+                  , dt2 = as.double(dt2)
+                  , nw = as.double(nw)
+                  , nw2 = as.double(nw2)
+                  , k = as.integer(k)
+                  , nFFT = as.integer(nFFT1)
+                  , nFFT2 = as.integer(nFFT2)
+                  , fRatio = as.integer(fRatio)
+                  , freq_range_idx = as.integer(freqRangeIdx)
+                  , H = complex((freqRangeIdx[2] - freqRangeIdx[1] + 1)*npred)
+                  , n_row_H = as.integer(freqRangeIdx[2] - freqRangeIdx[1] + 1))
+                  
+  out
+}
+
+#' @export
+#' @useDynLib transfer2
+tstzsvdregressionCompare <- function(j = 1){
+  d1 <- as.matrix(read.table("~/school_lab/bin/testing/mtmModTests/d1.dat"))[, 1]
+  d2 <- as.matrix(read.table("~/school_lab/bin/testing/mtmModTests/d2.dat"))
+  
+  ndata = 100; ndata2 = 200; npred = 2
+  nFFT = 256; nFFT2 = 512; k = 9
+  nblocks = 1
+  block_incr = 100/nblocks; block_incr2 = 200/nblocks
+  block_size = 100/nblocks; block_size2 = 200/nblocks; fRatio = 1
+  
+  dt = 2; dt2 = 1; nw = 5; nw2 = 5
+  
+  nfreqs <- nFFT/2+1; nfreqs2 <- nFFT2/2+1
+  
+  out <- .Fortran("tstcalctfwteigen", block_incr = as.integer(block_incr), block_incr2 = as.integer(block_incr2)
+                   , block_size = as.integer(block_size), block_size2 = as.integer(block_size2)
+                   , nblocks = as.integer(nblocks), d1 = as.double(d1), d2 = as.double(d2)
+                   , dt = as.double(dt), dt2 = as.double(dt2), nw = as.double(nw)
+                   , nw2 = as.double(nw2), k = as.integer(k)
+                   , nFFT = as.integer(nFFT), nFFT2 = as.integer(nFFT2)
+                   , yk1 = complex(nfreqs * k * nblocks), yk2 = complex(nfreqs2 * k * npred * nblocks)
+                   , ndata = as.integer(ndata), ndata2 = as.integer(ndata2), npred = as.integer(npred))
+  
+  # out2 <- .Fortran("tstWeightedEigenCoef", d1 = as.double(d1), d2 = as.double(d2[, 2])
+  #                  , n1 = as.integer(ndata), n2 = as.integer(ndata2)
+  #                  , m1 = as.integer(nFFT), m2 = as.integer(nFFT2)
+  #                  , yk1 = complex( (nFFT/2+1) * k ), yk2 = complex( (nFFT2/2+1) * k )
+  #                  , dt1 = as.double(dt), dt2 = as.double(dt2)
+  #                  , k = as.integer(k), nw = as.double(nw))
+  # yk22 <- matrix(out2$yk2, ncol = k)
+  
+  yk1 <- array(out$yk1, dim = c(nfreqs, k, nblocks))
+  yk2 <- array(out$yk2, dim = c(nfreqs2, k, npred, nblocks))
+  design <- matrix(0, ncol = npred, nrow = nblocks*k)
+  Y <- rep(0, nblocks*k)
+  H <- matrix(complex(real=0, imaginary = 0), nrow = nfreqs, ncol = npred)
+  
+  for (j in 1:nfreqs){
+    for (i in 0:(nblocks-1)){
+      Y[(i*k+1):((i+1)*k)] <- yk1[j, , i+1]
+      for (p in 1:npred){
+        design[(i*k+1):((i+1)*k), p] <- yk2[fRatio*(j-1)+1, , p, i+1]
+      }
+    }
+    Htmp <- .Fortran("svdRegTest", Y = as.complex(Y), X = as.complex(design), m = as.integer(nblocks*k)
+                     , n = as.integer(npred), beta = complex(npred), stdErr = double(npred)
+                     , svd_ev = double(npred))
+    H[j, ] <- Htmp$beta
+    # H[j, ] <- transfer::svdRegression(design, Y)$coef
+  }
+  
+  H
+}
+
+#' @export
+#' @useDynLib transfer2
+tstmatrix <- function(){
+  x <- matrix(1:15, nrow = 5, ncol = 3)
+  
+  out <- .Fortran("tstmatrixwrap", x = as.integer(x))
+  out
 }

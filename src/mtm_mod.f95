@@ -356,7 +356,7 @@ contains
       , i, j, p
     real*8 :: d1(ndata), d2(ndata2, npred), overlap, dt, dt2, nw, nw2 &
       , stdErr(npred), eigenval(npred)
-    complex*16 :: H(n_row_H, npred)
+    complex*16 :: H(n_row_H, npred), Htmp(npred)
     complex*16, allocatable :: yk1(:, :, :), yk2(:, :, :, :) &
       , Y(:), design(:, :)
 
@@ -381,13 +381,14 @@ contains
 
     do j = freq_range_idx(1), freq_range_idx(2)
       do i = 0, nblocks-1
-        Y((i*k+1):(i+1)*k) = yk1(j, :, i+1)
+        Y((i*k+1):((i+1)*k)) = yk1(j, :, i+1)
         do p = 1, npred
-          design((i*k+1):(i+1)*k, p) = yk2(j, :, p, i+1)
+          design((i*k+1):((i+1)*k), p) = yk2(fRatio*(j-1)+1, :, p, i+1)
         end do
       end do
       call zSvdRegression(Y, design, nblocks*k, npred &
-        ,H(j, :), stdErr, eigenval)
+        , Htmp, stdErr, eigenval)
+      H(j, :) = Htmp
     end do
 
     call dpss_cleanup(1)
@@ -821,7 +822,7 @@ contains
     integer :: i, m, n, lda, ldu, ldvt, lwork, info, lrwork
     real*8 :: svd_ev(n), stdErr(n), lworkopt
     real*8, allocatable :: rwork(:), s(:)
-    complex*16 :: Y(m), X(m, n), beta(n)
+    complex*16 :: Y(m), X(m, n), Xcopy(m,n), beta(n)
     complex*16, allocatable :: svd_work(:), u(:, :), vt(:, :)
     character(1) :: jobu, jobvt
 
@@ -831,7 +832,7 @@ contains
     lda = m
     ldu = m
     ldvt = n
-
+    Xcopy = X
     ! set values according to:
     ! http://www.netlib.org/lapack/explore-html/index.html
     ! search for zgesvd
@@ -851,7 +852,7 @@ contains
     allocate(svd_work(lwork))
 
     ! perform the svd
-    call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+    call zgesvd(jobu, jobvt, m, n, Xcopy, lda, s, u, ldu, vt, ldvt &
       , svd_work, lwork, rwork, info)
 
     ! calculate them betas '*' is matrix mult here
@@ -861,11 +862,11 @@ contains
     ! calculate the standard error estiamtes on the betas
     ! mandel eqn (20) NOT YET IMPLEMENTED
     do i = 1, n
-      stdErr(i) = -1 !sum(vt(:, i)x)
+      stdErr(i) = -1.0D0 !sum(vt(:, i)x)
     end do
 
     do i = 1, n
-      svd_ev(i) =  -1 ! NOT YET IMPLEMENTED!
+      svd_ev(i) =  -1.0D0 ! NOT YET IMPLEMENTED!
     end do
   end subroutine zSvdRegression
 
@@ -980,12 +981,6 @@ contains
     erfinv = dinvnorm(x) / dsqrt(2.0D0)
   end function erfinv
 
-  subroutine testem(x)
-    integer :: x
-
-    x = 5
-  end subroutine testem
-
 ! taken from WayBackMachine: https://web.archive.org/web/20151030215612/http://home.online.no/~pjacklam/notes/invnorm/
 ! and:
 ! https://stackedboxes.org/2017/05/01/acklams-normal-quantile-function/
@@ -1091,6 +1086,17 @@ contains
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!! Testing section !!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine testem(x)
+    integer :: x
+
+    x = 5
+  end subroutine testem
+
+  subroutine tstmatrix(x)
+    integer :: x(5, 3)
+
+    x(1, 1) = 2
+  end subroutine tstmatrix
 
   subroutine mtmtstcalctfwteigen(block_incr, block_incr2 &
     , block_size, block_size2, nblocks, d1, d2, dt, dt2, nw, nw2, k &

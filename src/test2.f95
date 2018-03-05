@@ -178,3 +178,25 @@ subroutine tstcalctfwteigen(block_incr, block_incr2 &
   call dpss_cleanup(1)
   call dpss_cleanup(2)
 end subroutine tstcalctfwteigen
+
+subroutine tsttfzero(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
+  , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
+  , freq_range_idx, H, n_row_H)
+  use mtm_mod
+  implicit none
+
+  integer :: ndata, ndata2, npred, block_size, block_size2, k &
+    , nFFT, nFFT2, fRatio, freq_range_idx(2), n_row_H
+  real*8 :: d1(ndata), d2(ndata2, npred), nw, nw2, overlap, dt, dt2
+  complex*16 :: H(n_row_H, npred)
+
+  call tf_zero(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
+    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
+    , freq_range_idx, H, n_row_H)
+end subroutine tsttfzero
+
+subroutine tstmatrixwrap(x)
+  use mtm_mod
+  integer :: x(5,3)
+  call tstmatrix(x)
+end subroutine tstmatrixwrap

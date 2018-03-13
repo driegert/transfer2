@@ -63,7 +63,7 @@ coherence <- function(d1, d2, ndata = length(d1), ndata2 = length(d2)
     nFFT <- 2^(floor(log2(blockSize))+2)
   }
   
-  dtRatio <- dt1 / dt2
+  dtRatio <- dt / dt2
   
   if (is.null(nFFT2) || nFFT2 < blockSize2){
     nFFT2 <- nFFT * dtRatio #2^(floor(log2(blockSize2))+2)

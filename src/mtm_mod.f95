@@ -349,6 +349,8 @@ contains
   ! to estimate the transfer function
   ! [out] H - complex*16(n_row_H, npred) - transfer function for each predictor
   ! in each column.
+  ! [in] n_row_H - integer - number of rows in H
+  ! should be: freq_range_idx(2) - freq_range_idx(1) + 1
 
     integer :: ndata, ndata2, npred, block_size, block_size2, k &
       , nFFT, nFFT2, fRatio, block_incr, block_incr2, nblocks, nblocks2 &
@@ -410,14 +412,14 @@ contains
       , freq_range_idx(2), max_freq_offset_idx &
       , block_incr, block_incr2, dstart_idx, dend_idx &
       , dstart_idx2, dend_idx2  &
-      , fRatio, dtRatio, use_off, nOff &
+      , fRatio, dtRatio, nOff &
       , total_offsets &
       , coh_nrow, coh_ncol &
       , col_order(coh_nrow, coh_ncol, npred) &
       , totFreqByCol(coh_ncol) &
       , offIdxAll(coh_nrow) &
-      , idxAll(coh_nrow), negIdxAll(3), nNegOff, nPosOff &
-      , i, j, p, ii, desCol(npred), t, wrk2(coh_nrow) &
+      , idxAll(coh_ncol), negIdxAll(3), nNegOff, nPosOff &
+      , i, j, p, ii, desCol(npred+1), t, wrk2(coh_nrow) &
       , hIdx(nhIdx), nhIdx, nhSubIdx, hPredBreak(npred+1) &
       , totFreqByColByPred(npred+1, coh_ncol)
     integer, allocatable :: freqIdx2(:), negOffIdx(:), posOffIdx(:) &
@@ -482,7 +484,8 @@ contains
 
       ! holds the indices of columns of H for this central frequency that
       ! will contain values
-      allocate(hSubIdx(totFreqByCol(j)), Htmp(totFreqByCol(j)))
+      allocate( hSubIdx(totFreqByCol(j)), Htmp(totFreqByCol(j)) &
+        , tmpErr(totFreqByCol(j)), tmpSvd_Ev(totFreqByCol(j)) )
 
       ! design matrix changes size based on number of significant offsets
       allocate( design( nblocks*k, totFreqByCol(j) ) )
@@ -491,12 +494,6 @@ contains
       ! covariates from each predictor
       desCol = (/ 1, (0, t = 1, npred) /)
       do p = 1, npred
-
-        ! don't waste time if there are no frequencies to add from this
-        ! predictor
-        if (totFreqByColByPred(p+1, j) == 0) then
-          cycle
-        end if
         ! which offsets for the j-th column and p-th predictor should be used
         wrk2 = col_order(:, j, p)
         ! the number of predictors to assign indices to the design matrix
@@ -509,15 +506,26 @@ contains
         nPosOff = size(pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ))
         allocate(negOffIdx(nNegOff), posOffIdx(nPosOff))
         ! takes into account fRatio :)
-        negOffIdx = ( fRatio * &
-          (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll .le. 0) ) - 1) ) + 1
-        posOffIdx = (fRatio * &
-          (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ) - 1) ) + 1
+        if (nNegOff > 0) then
+          negOffIdx = ( fRatio * &
+            (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll .le. 0) ) - 1) ) + 1
+          negOffIdx = abs(negOffIdx) + 2
+        end if
+
+        if (nPosOff > 0) then
+          posOffIdx = (fRatio * &
+            (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ) - 1) ) + 1
+        end if
 
         ! these are columns of the design matrix which will have the -ve offs
         negIdxAll = (/ 1, nNegOff, desCol(p+1) - desCol(p) /)
 
         do i = 0, nblocks-1
+          if (p .eq. 1) then
+            ! response eigencoefficients
+            Y((i*k+1):((i+1)*k)) = yk1(freq_range_idx(1) + j - 1, :, i+1)
+          end if
+
           ! if there *are* offsets at negative frequencies:
           if (negIdxAll(2) .ne. 0) then
             design((i*k+1):((i+1)*k), desCol(p):(desCol(p) + nNegOff - 1)) = &
@@ -527,10 +535,6 @@ contains
           if (negIdxAll(3) .ne. negIdxAll(2)) then
             design((i*k+1):((i+1)*k), (desCol(p)+nNegOff):(desCol(p+1)-1)) = &
               transpose(yk2(posOffIdx, :, p, i+1))
-          end if
-          if (i .eq. 0) then
-            ! response eigencoefficients
-            Y((i*k+1):((i+1)*k)) = yk1(freq_range_idx(1) + j - 1, :, i+1)
           end if
 
           deallocate(negOffIdx, posOffIdx)
@@ -550,7 +554,7 @@ contains
 
       H(j, hSubIdx) = Htmp
 
-      deallocate(design, hSubIdx, Htmp)
+      deallocate(design, hSubIdx, Htmp, tmpErr, tmpSvd_Ev)
     end do
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -844,7 +848,7 @@ contains
 
     ! obtain optimal size for lwork
     lwork = -1
-    call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+    call zgesvd(jobu, jobvt, m, n, Xcopy, lda, s, u, ldu, vt, ldvt &
       , lworkopt, lwork, rwork, info)
 
     ! allocate the work array

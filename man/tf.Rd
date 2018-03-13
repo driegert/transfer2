@@ -4,16 +4,56 @@
 \alias{tf}
 \title{Estimates the transfer functions}
 \usage{
-tf(d1, d2, ndata = length(d1), ndata2 = dim(d2)[1], blockSize = ndata,
-  blockSize2 = blockSize, overlap = 0, dt = 1, dt2 = dt, nw = 4,
-  nw2 = NULL, k = 7, nFFT = NULL, nFFT2 = nFFT, freqRange = NULL,
-  maxFreqOffset = 0, nOff = -1, forceZeroFreq = TRUE, sigLevel = 0.99,
-  name1 = "d1", name2 = "d2")
+tf(d1, d2, blockSize = dim(d1)[1], blockSize2 = blockSize, overlap = 0,
+  dt = 1, dt2 = dt, nw = 4, nw2 = NULL, k = 7, nFFT = NULL,
+  nFFT2 = NULL, freqRange = NULL, maxFreqOffset = 0, nOff = -1,
+  forceZeroFreq = TRUE, sigLevel = 0.99, name1 = "d1", name2 = "d2")
 }
 \arguments{
-\item{d1}{A real vector containing the response.}
+\item{d1}{A single column \code{data.frame} containing the response.}
 
 \item{d2}{A \code{data.frame} whose columns contain the predictors.}
+
+\item{blockSize}{The number of points per block to use for the response (default = dim(d1)[1])}
+
+\item{blockSize2}{The number of points per block to use for the inputs (default = dim(d2)[2])}
+
+\item{overlap}{A number between 0 and 1 representing the proportion of overlap between adjacent
+blocks.}
+
+\item{dt}{A value representing the sampling rate of the response (in seconds).}
+
+\item{dt2}{A value representing the sampling rate of the predictors (in seconds).}
+
+\item{nw}{The time bandwidth parameter to use with the response.}
+
+\item{nw2}{The time bandwidth parameter to use with the predictors (only set this if you 
+know what you're doing -_- )}
+
+\item{k}{The number of tapers to use (the same for response and predictors).}
+
+\item{nFFT}{The number of frequency bins to be used for the response (sets zero-padding).}
+
+\item{nFFT2}{The number of frequency bins to be used for predictors (sets zero-padding) - 
+(only set this if you know what you're doing).}
+
+\item{freqRange}{A vector of 2 values containing the start and end values of the frequency band 
+for the response, over which to estimate the transfer function (in Hz).}
+
+\item{maxFreqOffset}{The maximum from the central frequency to use when estimating the transfer 
+functions (careful here too).}
+
+\item{nOff}{An \code{integer} representing the number of offset frequencies that are allowed to be used.}
+
+\item{forceZeroFreq}{A \code{logical} indicating whether to always use the zero-offset frequency
+(default = TRUE).}
+
+\item{sigLevel}{A value between 0 and 1 representing the confidence level to use when determining whether 
+the coherence between response and predictor should be considered statistically significant.}
+
+\item{name1}{I don't think this is used ...}
+
+\item{name2}{I don't think this is used ... yet.}
 }
 \description{
 Estimates a transfer function using frequency offsets between a response and multiple inputs

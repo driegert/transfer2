@@ -526,3 +526,22 @@ tstmatrix <- function(){
   out <- .Fortran("tstmatrixwrap", x = as.integer(x))
   out
 }
+
+# there isn't a good way to compare these, since transfer::tf() doesn't accommodate the offset 
+# frequencies.
+tsttransfer12compare <- function(){
+  d1 <- read.table(file = "~/school_lab/bin/testing/mtmModTests/d1.dat")
+  d2 <- read.table(file = "~/school_lab/bin/testing/mtmModTests/d2.dat")
+  
+  ndata = length(d1); ndata2 = dim(d2)[1]
+  blockSize = ndata; blockSize2 = ndata2; overlap = 0
+  dt = 2; dt2 = 1; 
+  nFFT = nFFT1
+  freqRange = c(0.15, 0.2); maxFreqOffset = 0.1; nOff = -1
+  forceZeroFreq = TRUE
+  sigLevel = 0.99
+  name1 = "d1"; name2 = "d2"
+  forceZeroFreq = TRUE
+  
+  # H <- transfer::tf()
+}

@@ -8,3 +8,10 @@ determineNW2 <- function(n1, n2, dt1, dt2, nw1){
 determineFreqRatio <- function(dt1, dt2, nFFT1, nFFT2){
   (nFFT2 * dt2) / (nFFT1 * dt1)
 }
+
+#' @export
+df.std <- function(x){
+  stopifnot(class(x) == "data.frame")
+  
+  as.data.frame(lapply(x, function(z){ (z - mean(z)) / sd(z) }))
+}

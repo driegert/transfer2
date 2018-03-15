@@ -26,19 +26,22 @@
 #' (default = TRUE).
 #' @param sigLevel A value between 0 and 1 representing the confidence level to use when determining whether 
 #' the coherence between response and predictor should be considered statistically significant.
+#' @param standardize A \code{logical} indicating whether the data should have its mean subtracted off and 
+#' standard deviation divided out.
 #' @param name1 I don't think this is used ... 
 #' @param name2 I don't think this is used ... yet.
 #' 
 #' @export
 #' @useDynLib transfer2
 tf <- function(d1, d2
-               , blockSize = dim(d1)[1], blockSize2 = blockSize, overlap = 0
+               , blockSize = dim(d1)[1], blockSize2 = dim(d2)[1], overlap = 0
                , dt = 1, dt2 = dt, nw = 4, nw2 = NULL, k = 7
                , nFFT = NULL, nFFT2 = NULL
                , freqRange = NULL, maxFreqOffset = 0, nOff = -1
                , forceZeroFreq = TRUE
                , sigLevel = 0.99
-               , name1 = "d1", name2 = "d2"){
+               , standardize = TRUE
+               , name1 = names(d1), name2 = names(d2)){
   
   ndata <- dim(d1)[1]
   ndata2 <- dim(d2)[1]
@@ -49,6 +52,11 @@ tf <- function(d1, d2
   # One (me) assumes that you will be using powers of 2 ... 
   if (dt < dt2){
     stop("d1 is the central frequency series.  You should make the faster sampled series d2.")
+  }
+  
+  if (standardize){
+    d1 <- as.data.frame(lapply(d1, function(x){ (x - mean(x)) / sd(x) }))
+    d2 <- as.data.frame(lapply(d2, function(x){ (x - mean(x)) / sd(x) }))
   }
   
   if (is.null(nFFT) || nFFT < blockSize) {
@@ -80,9 +88,9 @@ tf <- function(d1, d2
   
   # this if-statement is here because there were issues when freqRange == NULL
   if (is.null(freqRange)){
-    warnings("freqRange == NULL: Setting freqRange to full positive band and maxFreqOffset to 0.")
+    warnings("freqRange == NULL: Setting freqRange to full positive band.")
     freqRange <- c(0, 1/(2*dt))
-    maxFreqOffset <- 0
+    # maxFreqOffset <- 0
     
     freqRangeIdx <- c(1, nFFT/2+1)
   } else {
@@ -134,6 +142,8 @@ tf <- function(d1, d2
                     , n_row_H = as.integer(numCol))
     
     H <- matrix(out$H, nrow = numCol, ncol = npred)
+    hIdx <- rep(1, npred)
+    hPredBreak <- 1:4
   } else {
     if (forceZeroFreq & (maxOffIdx < zeroDeadZone)){
       stop("maxFreqOffset should be larger than (B1)/3 in order to use the zero offset frequency.")
@@ -262,7 +272,8 @@ tf <- function(d1, d2
                , dt = dt, dt2 = dt2, nw = nw, nw2 = nw2, k = k, nFFT = nFFT, nFFT2 = nFFT2
                , freqRange = freqRange, freqRangeIdx = freqRangeIdx
                , maxFreqOffset = maxFreqOffset, maxOffsetIdx = maxOffIdx
-               , nOff = nOff, forceZeroFreq = forceZeroFreq, sigLevel = sigLevel)
+               , nOff = nOff, forceZeroFreq = forceZeroFreq, sigLevel = sigLevel
+               , standardize = standardize)
   
   list(H = H, Hinfo = Hinfo, info = info)
 }
@@ -282,6 +293,15 @@ ykPredict <- function(H, Hinfo, info, d2){
   }
 }
 
+#' Spectrum prediction
+#' Predicts the spectrum based on an estimated transfer function and new data provided.
+#' 
+#' @param H The H returned by tf().
+#' @param Hinfo The Hinfo returned by tf().
+#' @param info The info returned by tf().
+#' @param d2 A \code{data.frame} containing the new data.  Must have the same column names as the original 
+#' data used in the transfer function estimation.
+#' 
 #' @export
 specPredict <- function(H, Hinfo, info, d2){
   predNames <- names(d2)

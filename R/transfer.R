@@ -24,6 +24,9 @@
 #' @param nOff An \code{integer} representing the number of offset frequencies that are allowed to be used.
 #' @param forceZeroFreq A \code{logical} indicating whether to always use the zero-offset frequency
 #' (default = TRUE).
+#' @param deadBand A 2-vector containing the start and end region of a band to ignore when estimating the 
+#' transfer functions.  This would occur due to high pass filtering for example (low frequency trend removal).
+#' 
 #' @param sigLevel A value between 0 and 1 representing the confidence level to use when determining whether 
 #' the coherence between response and predictor should be considered statistically significant.
 #' @param standardize A \code{logical} indicating whether the data should have its mean subtracted off and 
@@ -39,6 +42,7 @@ tf <- function(d1, d2
                , nFFT = NULL, nFFT2 = NULL
                , freqRange = NULL, maxFreqOffset = 0, nOff = -1
                , forceZeroFreq = TRUE
+               , deadBand = NULL
                , sigLevel = 0.99
                , standardize = TRUE
                , name1 = names(d1), name2 = names(d2)){
@@ -55,8 +59,18 @@ tf <- function(d1, d2
   }
   
   if (standardize){
+    d1.stdPar <- data.frame(variable = names(d1), mean = mean(d1[, 1]), sd = sd(d1[, 1]), stringsAsFactors = FALSE)
     d1 <- as.data.frame(lapply(d1, function(x){ (x - mean(x)) / sd(x) }))
+    pnam <- names(d2)
+    d2.stdPar <- data.frame(variable = pnam, mean = rep(-999.9, ncol(d2)), sd = rep(-999.9, ncol(d2))
+                            , stringsAsFactors = FALSE)
+    for (i in 1:ncol(d2)){
+      d2.stdPar[which(d2.stdPar$variable == pnam[i]), c("mean", "sd")] <- c(mean(d2[, pnam[i]]), sd(d2[, pnam[i]]))
+    }
     d2 <- as.data.frame(lapply(d2, function(x){ (x - mean(x)) / sd(x) }))
+  } else {
+    d1.stdPar <- NULL
+    d2.stdPar <- NULL
   }
   
   if (is.null(nFFT) || nFFT < blockSize) {
@@ -85,6 +99,7 @@ tf <- function(d1, d2
   }
   
   df <- 1 / (dt*nFFT)
+  df2 <- 1 / (dt2 * nFFT2)
   
   # this if-statement is here because there were issues when freqRange == NULL
   if (is.null(freqRange)){
@@ -171,16 +186,33 @@ tf <- function(d1, d2
                       , offsets = double(numRow), freq_range_idx = as.integer(freqRangeIdx)
                       , max_freq_offset_idx = as.integer(maxOffIdx)
                       , calc_type = as.integer(1)
-                      , conv_msc2norm = as.integer(1)
+                      , conv_msc2norm = as.integer(0)
                       , is_forward = as.integer(1))
 
+      #########################################################
+      # FIX THIS ... error function estimation is BAD in msc2norm() (and in the Fortran code too... )
+      # this breaks when the MSC is >= 0.94
+      out$coh[which(Re(out$coh) > 0.93)] <- complex(real = 0.93, imaginary = 0) ## this is a fucking awful hack.
+      out$coh <- msc2norm(Re(out$coh), dof = k)
+      #################################################
+      
+      ##########
+      ### there are issues if you try to run this code after filtering (division by close to 0's)
+      # the problem occurs when the the offset frequency used close to the filter "hole" in the spectrum
+      # so we modify the coherence by setting it to zero in the bands where we "know" issues will occur.
+      ###### Have to come back and fix this...
+      if (!is.null(deadBand)){
+        out$coh <- fixDeadBand(msc = matrix(Re(out$coh), nrow = numRow, ncol = numCol)
+                               , zeroOffsetIdx = maxOffIdx + 1
+                               , freqRangeIdx = freqRangeIdx, band = deadBand[2], df = df)
+      }
+      
       out2 <- .Fortran("callMscIndicator", msc = as.double(Re(out$coh)), nrow = as.integer(numRow)
                        , ncol = as.integer(numCol), ind = integer(numRow * numCol)
                        , level = as.double(level), nOff = as.integer(nOff))
       
       ind[, , i] <- matrix(out2$ind, nrow = numRow, ncol = numCol)
       
-      ## something about 
       
       # make the zero-offset a "significant" frequency and implement a deadzone around it.
       if (forceZeroFreq & (maxOffIdx > zeroDeadZone)){
@@ -272,26 +304,28 @@ tf <- function(d1, d2
                , dt = dt, dt2 = dt2, nw = nw, nw2 = nw2, k = k, nFFT = nFFT, nFFT2 = nFFT2
                , freqRange = freqRange, freqRangeIdx = freqRangeIdx
                , maxFreqOffset = maxFreqOffset, maxOffsetIdx = maxOffIdx
+               , df = df, df2 = df2
                , nOff = nOff, forceZeroFreq = forceZeroFreq, sigLevel = sigLevel
-               , standardize = standardize)
+               , standardize = standardize, d1.stdPar = d1.stdPar
+               , d2.stdPar = d2.stdPar)
   
   list(H = H, Hinfo = Hinfo, info = info)
 }
 
 ### maybe want this later?  not sure if the eigencoefficients are quite what we want.
-ykPredict <- function(H, Hinfo, info, d2){
-  # make sure column names of d2 match those in Hinfo
-  ###
-  ###
-  spec <- list()
-  yk2 <- list()
-  for (i in 1:ncol(d2)){
-    spec[[i]] <- multitaper::spec.mtm(d2[, i], nw = info$nw2, k = info$k, deltat = info$dt2
-                                      , nFFT = info$nFFT2
-                                      , returnInternals = TRUE, plot = FALSE)
-    yk2[[i]] <- spec[[i]]$mtm$eigenCoefs * spec[[i]]$mtm$eigenCoefWt
-  }
-}
+# ykPredict <- function(H, Hinfo, info, d2){
+#   # make sure column names of d2 match those in Hinfo
+#   ###
+#   ###
+#   spec <- list()
+#   yk2 <- list()
+#   for (i in 1:ncol(d2)){
+#     spec[[i]] <- multitaper::spec.mtm(d2[, i], nw = info$nw2, k = info$k, deltat = info$dt2
+#                                       , nFFT = info$nFFT2
+#                                       , returnInternals = TRUE, plot = FALSE)
+#     yk2[[i]] <- spec[[i]]$mtm$eigenCoefs * spec[[i]]$mtm$eigenCoefWt
+#   }
+# }
 
 #' Spectrum prediction
 #' Predicts the spectrum based on an estimated transfer function and new data provided.
@@ -324,4 +358,69 @@ specPredict <- function(H, Hinfo, info, d2){
   }
   
   sRecon
+}
+
+#' Impulse response from transfer functions
+#' Inverse Fourier transforms the transfer function to give the impulse response
+#' 
+#' @param H A \code{matrix} where each column contains a transfer function - tf()$H would be appropriate.
+#' @param n An \code{integer} indicating the half-length of the impulse response to return, L = 2*n+1. 
+#' Normally this would be the \code{blockSize2} agrument used in tf().
+#' @param realPart A \code{logical} indicating whether to return only the real part of the impulse response
+#' (default = TRUE) or return the complex-valued impulse response (FALSE)
+#' 
+#' @export
+# Careful here... we're using R's FFT on the H's calculated in Fortran with FFTpack (or whatever it's called)
+ir <- function(H, n, realPart = TRUE){
+  stopifnot(is.matrix((H)) | n > ncol(H))
+  # "negative" frequencies in the top half of the array
+  # ^^ these are conjugated first and reversed (should be conjugate symmetric after)
+  Hfull <- rbind(H, Conj(H[(nrow(H) - 1):2, , drop = FALSE]))
+  
+  # should be real-valued with real-valued data as inputs.
+  if (realPart){
+    h <- Re(mvfft(Hfull, inverse = TRUE) / nrow(Hfull))
+  } else {
+    h <- mvfft(Hfull, inverse = TRUE) / nrow(Hfull)
+  }
+  
+  n <- n+1
+  # put the impulse response in the correct place in the array in order to use in a convolution - i.e., filter()
+  ind <- c((nrow(h)-n+2):nrow(h), 1:n)
+  
+  h[ind, , drop = FALSE]
+}
+
+
+#' Predict the Time Series from the predictors and impulse response
+#' 
+#' @param newdata A \code{data.frame} containing the predictors.  Column names must match what is 
+#' present in Hinfo.
+#' @param ir A \code{matrix} containing the impulse responses corresponding to the rows in Hinfo.
+#' @param Hinfo A piece of what is returned by tf().
+#' @param info Another piece of what is returned by tf().
+#' 
+#' @export
+predictTs <- function(newdata, ir, Hinfo, info){
+  N <- nrow(newdata)
+  yhat <- rep(0, N)
+  nFlt <- nrow(ir)
+  nTrim <- (nFlt - 1) / 2
+  
+  # standardize the input if necessary.
+  if (info$standardize){
+    newdata <- df.std(newdata)
+  }
+  
+  for (i in 1:nrow(Hinfo)){
+    ## Should this be 2*pi*(1:N) or 2*pi*(0:N) ?
+    ## is the negative necessary? I guess it doesn't matter since cos(x) is an even function... 
+    tmp <- zFilter(2*cos(-2*pi*(0:(N-1))*(Hinfo$idxOffset[i]/info$nFFT2)) * newdata[, Hinfo$predictor[i]]
+                   , ir[, Hinfo$Hcolumn[i]])
+    
+    yhat <- yhat + tmp[nTrim + 1:N] # this adds NA's at the end, also has NA's at the beginning - I need to look at 
+    # zFilter again for how this works by convoling using FFT's ... 
+  }
+  
+  yhat
 }

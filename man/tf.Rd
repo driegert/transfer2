@@ -7,8 +7,8 @@
 tf(d1, d2, blockSize = dim(d1)[1], blockSize2 = dim(d2)[1], overlap = 0,
   dt = 1, dt2 = dt, nw = 4, nw2 = NULL, k = 7, nFFT = NULL,
   nFFT2 = NULL, freqRange = NULL, maxFreqOffset = 0, nOff = -1,
-  forceZeroFreq = TRUE, sigLevel = 0.99, standardize = TRUE,
-  name1 = names(d1), name2 = names(d2))
+  forceZeroFreq = TRUE, deadBand = NULL, sigLevel = 0.99,
+  standardize = TRUE, name1 = names(d1), name2 = names(d2))
 }
 \arguments{
 \item{d1}{A single column \code{data.frame} containing the response.}
@@ -48,6 +48,9 @@ functions (careful here too).}
 
 \item{forceZeroFreq}{A \code{logical} indicating whether to always use the zero-offset frequency
 (default = TRUE).}
+
+\item{deadBand}{A 2-vector containing the start and end region of a band to ignore when estimating the 
+transfer functions.  This would occur due to high pass filtering for example (low frequency trend removal).}
 
 \item{sigLevel}{A value between 0 and 1 representing the confidence level to use when determining whether 
 the coherence between response and predictor should be considered statistically significant.}

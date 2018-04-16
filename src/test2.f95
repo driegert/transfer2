@@ -119,3 +119,84 @@ subroutine tstEigenvals(n1, n2, k, nw, m1, m2, lambda1, lambda2)
   call dpss_cleanup(1)
   call fft_cleanup(1)
 end subroutine tstEigenvals
+
+
+subroutine tsthfind(col, hIdx, ncol, nhIdx, idxSub, nSub, baseIdx)
+  use mtm_mod
+  implicit none
+
+  integer :: ncol, nhIdx, nSub, baseIdx, col(ncol), hIdx(nhIdx) &
+    , idxSub(nSub)
+
+  call tstfindhidx(col, hIdx, ncol, nhIdx, idxSub, nSub, baseIdx)
+end subroutine tsthfind
+
+
+subroutine tstblockincrement(block_size, overlap, block_incr)
+  use mtm_mod
+  implicit none
+
+  integer :: block_size, block_incr
+  real*8 :: overlap
+
+  block_incr = block_increment(block_size, overlap)
+end subroutine tstblockincrement
+
+
+subroutine tstcalculatenblocks(ndata, block_size, block_incr, nblocks)
+  use mtm_mod
+  implicit none
+
+  integer :: ndata, block_size, block_incr, nblocks
+
+  nblocks = calculate_nblocks(ndata, block_size, block_incr)
+end subroutine tstcalculatenblocks
+
+subroutine tstcalctfwteigen(block_incr, block_incr2 &
+  , block_size, block_size2, nblocks, d1, d2, dt, dt2, nw, nw2, k &
+  , nFFT, nFFT2, yk1, yk2, ndata, ndata2, npred)
+  use mtm_mod
+  implicit none
+
+  integer :: block_incr, block_incr2, block_size, block_size2, nblocks &
+    , k, nFFT, nFFT2, i, j, dstart_idx, dend_idx &
+    , dstart_idx2, dend_idx2, ndata, ndata2, npred, nrow, ncol
+  real*8 :: d1(ndata), d2(ndata2, npred), dt, dt2, nw, nw2, s1(nfreq), s2(nfreq2)
+  complex*16 :: yk1(nfreq, k, nblocks), yk2(nfreq2, k, npred, nblocks)
+
+  call fft_setup(nFFT, 1)
+  call fft_setup(nFFT2, 2)
+  call dpss_setup(block_size, nw, k, nFFT, 1)
+  call dpss_setup(block_size2, nw2, k, nFFT2, 2)
+
+  call mtmtstcalctfwteigen(block_incr, block_incr2 &
+    , block_size, block_size2, nblocks, d1, d2, dt, dt2, nw, nw2, k &
+    , nFFT, nFFT2, yk1, yk2, ndata, ndata2, npred)
+
+  call fft_cleanup(1)
+  call fft_cleanup(2)
+  call dpss_cleanup(1)
+  call dpss_cleanup(2)
+end subroutine tstcalctfwteigen
+
+subroutine tsttfzero(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
+  , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
+  , freq_range_idx, H, n_row_H)
+  use mtm_mod
+  implicit none
+
+  integer :: ndata, ndata2, npred, block_size, block_size2, k &
+    , nFFT, nFFT2, fRatio, freq_range_idx(2), n_row_H
+  real*8 :: d1(ndata), d2(ndata2, npred), nw, nw2, overlap, dt, dt2
+  complex*16 :: H(n_row_H, npred)
+
+  call tf_zero(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
+    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
+    , freq_range_idx, H, n_row_H)
+end subroutine tsttfzero
+
+subroutine tstmatrixwrap(x)
+  use mtm_mod
+  integer :: x(5,3)
+  call tstmatrix(x)
+end subroutine tstmatrixwrap

@@ -324,90 +324,150 @@ contains
     end do
   end subroutine coh_denom
 
+  subroutine tf_zero(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
+    , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
+    , freq_range_idx, H, n_row_H)
+  ! [in] d1(ndata) - real*8 - a vector of data (response)
+  ! [in] d2(ndata2, npred) - real*8 - predictors - each column is one series
+  ! [in] ndata - integer - number of total data points in response
+  ! [in] ndata2 - integer - number of total data points in each predictor
+  ! [in] npred - integer - number of predictors
+  ! [in] block_size - integer - block size for series1
+  ! [in] block_size2 - integer - block size for series2
+  ! [in] overlap - real*8 - proportion that each block overlaps
+  ! [in] dt - real*8 - sampling rate for series1
+  ! [in] dt2 - real*8 - sampling rate for series2
+  ! [in] nw - real*8 - time bandwidth parameter for multitaper, series1
+  ! [in] nw2 - real*8 - time bandwidth parameter for multitaper, series2
+  ! [in] k - integer - number of tapers (2*NW-1 usually)
+  ! [in] nFFT - integer - number of frequency bins (zero-padding), series1
+  ! [in] nFFT2 - integer - number of frequency bins (zero-padding), series2
+  ! [in] fRatio - integer - spacing between series 2 frequency bins such that
+  ! subsequent frequencies for series1 are the same as frequencies separated by
+  ! fRatio in series2
+  ! [in] freq_range_idx - integer(2) - starting and ending indices over which
+  ! to estimate the transfer function
+  ! [out] H - complex*16(n_row_H, npred) - transfer function for each predictor
+  ! in each column.
+  ! [in] n_row_H - integer - number of rows in H
+  ! should be: freq_range_idx(2) - freq_range_idx(1) + 1
+
+    integer :: ndata, ndata2, npred, block_size, block_size2, k &
+      , nFFT, nFFT2, fRatio, block_incr, block_incr2, nblocks, nblocks2 &
+      , dtRatio, freq_range_idx(2), n_row_H &
+      , i, j, p
+    real*8 :: d1(ndata), d2(ndata2, npred), overlap, dt, dt2, nw, nw2 &
+      , stdErr(npred), eigenval(npred)
+    complex*16 :: H(n_row_H, npred), Htmp(npred)
+    complex*16, allocatable :: yk1(:, :, :), yk2(:, :, :, :) &
+      , Y(:), design(:, :)
+
+    dtRatio = dt / dt2 ! doesn't check that this should *actually* be an integer
+
+    block_incr = block_increment(block_size, overlap)
+    block_incr2 = block_incr * dtRatio
+
+    nblocks = calculate_nblocks(ndata, block_size, block_incr)
+
+    call fft_setup(nFFT, 1)
+    call fft_setup(nFFT2, 2)
+    call dpss_setup(block_size, nw, k, nFFT, 1)
+    call dpss_setup(block_size2, nw2, k, nFFT2, 2)
+
+    allocate(design(nblocks*k, npred), Y(nblocks*k))
+    allocate(yk1(nfreq, k, nblocks), yk2(nfreq2, k, npred, nblocks))
+
+    call calc_tf_wt_eigen(block_incr, block_incr2 &
+      , block_size, block_size2, nblocks, d1, d2, npred &
+      , dt, dt2, nw, nw2, k, nFFT, nFFT2, yk1, yk2)
+
+    do j = freq_range_idx(1), freq_range_idx(2)
+      do i = 0, nblocks-1
+        Y((i*k+1):((i+1)*k)) = yk1(j, :, i+1)
+        do p = 1, npred
+          design((i*k+1):((i+1)*k), p) = yk2(fRatio*(j-1)+1, :, p, i+1)
+        end do
+      end do
+      call zSvdRegression(Y, design, nblocks*k, npred &
+        , Htmp, stdErr, eigenval)
+      H(j, :) = Htmp
+    end do
+
+    call dpss_cleanup(1)
+    call dpss_cleanup(2)
+    call fft_cleanup(1)
+    call fft_cleanup(2)
+  end subroutine tf_zero
+
 !! ######################################
 !! ######################################
   subroutine tf(d1, d2, ndata, ndata2, npred, block_size, block_size2 &
     , overlap, dt, dt2, nw, nw2, k, nFFT, nFFT2, fRatio &
     , freq_range_idx, max_freq_offset_idx, H &
-    , coh_nrow, coh_ncol, totFreqByCol, total_offsets &
+    , coh_nrow, coh_ncol, totFreqByCol, totFreqByColByPred, total_offsets &
     , col_order, hPredBreak, hIdx, nhIdx)
 
-    integer :: ndata, ndata2, npred, nblocks &
+    integer :: ndata, ndata2, npred, nblocks, nblocks2 &
       , block_size, block_size2, k, nFFT, nFFT2 &
       , freq_range_idx(2), max_freq_offset_idx &
       , block_incr, block_incr2, dstart_idx, dend_idx &
       , dstart_idx2, dend_idx2  &
-      , fRatio, dtRatio, use_off, nOff &
+      , fRatio, dtRatio, nOff &
       , total_offsets &
       , coh_nrow, coh_ncol &
       , col_order(coh_nrow, coh_ncol, npred) &
       , totFreqByCol(coh_ncol) &
       , offIdxAll(coh_nrow) &
-      , idxAll(coh_nrow), negIdxAll(3), nNegOff, nPosOff &
-      , i, j, p, desCol(npred), t, wrk2(coh_nrow) &
-      , hIdx(nhIdx), nhIdx, nhSubIdx, hPredBreak(npred+1)
+      , idxAll(coh_ncol), negIdxAll(3), nNegOff, nPosOff &
+      , i, j, p, ii, desCol(npred+1), t, wrk2(coh_nrow) &
+      , hIdx(nhIdx), nhIdx, nhSubIdx, hPredBreak(npred+1) &
+      , totFreqByColByPred(npred+1, coh_ncol)
     integer, allocatable :: freqIdx2(:), negOffIdx(:), posOffIdx(:) &
       , hSubIdx(:)
     real*8 :: d1(ndata), d2(ndata2, npred), overlap &
       , dt, dt2, nw, nw2, freq(nFFT/2+1)
-    real*8, allocatable :: s1(:), s2(:), tmpErr(:), tmpSvd_Ev(:)
+    real*8, allocatable :: tmpErr(:), tmpSvd_Ev(:)
     complex*16 :: H(coh_ncol, total_offsets)
     complex*16, allocatable :: yk1(:, :, :), yk2(:, :, :, :) &
       , design(:, :), Y(:), Htmp(:)
 
-    ! fRatio = (nFFT2 *dt2) / (nFFT * dt)
+    ! fRatio = (nFFT2 *dt2) / (nFFT * dt) <- gets passed
     dtRatio = dt / dt2 ! I dont think this gets used...
 
     ! setting up block indices for eigencoefficient calcs
-    block_incr = floor(block_size * (1.0D0 - overlap))
+    block_incr = block_increment(block_size, overlap) !floor(block_size * (1.0D0 - overlap))
     block_incr2 = block_incr * dtRatio
   ! these two sizes should be the same...
-    nblocks = min(size( (/ (j, j = 1, ndata - block_size + 1, block_incr) /) ) &
-      , size( (/ (j, j = 1, ndata2 - block_size2 + 1, block_incr2) /) ))
+    ! nblocks = min(size( (/ (j, j = 1, ndata - block_size + 1, block_incr) /) ) &
+    !   , size( (/ (j, j = 1, ndata2 - block_size2 + 1, block_incr2) /) ))
+    nblocks = calculate_nblocks(ndata, block_size, block_incr)
+    nblocks2 = calculate_nblocks(ndata2, block_size2, block_incr2)
+
+!!! make this work with R!
+    if (nblocks .ne. nblocks2) then
+      print *, "I don't know what to do here... error number?"
+    end if
 
   ! setup the fft work matrices and dpss vectors
     call fft_setup(nFFT, 1)
     call fft_setup(nFFT2, 2)
     call dpss_setup(block_size, nw, k, nFFT, 1)
-    call dpss_setup(block_size2, nw2, k, nFFT2, 1)
+    call dpss_setup(block_size2, nw2, k, nFFT2, 2)
 
-    allocate(s1(nfreq), s2(nfreq2))
     allocate(yk1(nfreq, k, nblocks), yk2(nfreq2, k, npred, nblocks))
     allocate(freqIdx2(nfreq2))
 
-  ! I need to test this ... <le sigh>
-  ! calculate all the eigencoefficients
-    do i = 0, nblocks - 1
-      dstart_idx = i*block_incr + 1
-      dend_idx = i*block_incr + block_size - 1
-      dstart_idx2 = i*block_incr2 + 1
-      dend_idx2 = i*block_incr2 + block_size2 - 1
-
-    ! store the eigencoefficients by block for the response
-      call weighted_eigencoef(d1(dstart_idx:dend_idx), block_size, dt &
-       , nw, k, yk1(:, :, i), s1, nFFT, 1)
-    ! store the eigencoefficients by block and predictor for the inputs
-      do j = 1, npred
-        call weighted_eigencoef(d2(dstart_idx2:dend_idx2, j) &
-          , block_size2, dt2, nw2, k, yk2(:, :, j, i), s2, nFFT2, 2)
-      end do
-    end do
+    call calc_tf_wt_eigen(block_incr, block_incr2 &
+      , block_size, block_size2, nblocks, d1, d2, npred &
+      , dt, dt2, nw, nw2, k, nFFT, nFFT2, yk1, yk2)
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! setup the design matrices and allocate H(:, :)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! offsets to be used
-  !! provided as a function argument
-    ! call numberOffsets(col_order, total_offsets, totFreqByCol &
-    !   , coh_nrow, coh_ncol, npred) ! all of these are passed
-
-    offIdxAll = (/ (i, i = freq_range_idx(1), freq_range_idx(2)) /) &
-      - (max_freq_offset_idx + 1)
-
-    ! idxAll = (/ (i, i = 1, coh_nrow) /) ! delete this
+    ! idxAll = (/ (i, i = 1, coh_nrow) /) ! <- delete this
     idxAll = (/ (i, i = freq_range_idx(1), freq_range_idx(2)) /)
 
-    !allocate(H(size(idxAll), total_offsets)) ! gets passed in
+    !allocate(H(size(idxAll), total_offsets)) ! <- gets passed in
     H = dcmplx(0.0D0, 0.0D0) ! initialize this
     allocate(Y(nblocks*k))
 
@@ -417,7 +477,17 @@ contains
         cycle
       end if
 
-      ! design matrix changes size based on
+      ! current offset indices in yk2 to be used
+      ! central frequency - offset up to central frequency + offset
+      offIdxAll = (/ (ii, ii = idxAll(j) - max_freq_offset_idx &
+        , idxAll(j) + max_freq_offset_idx) /)
+
+      ! holds the indices of columns of H for this central frequency that
+      ! will contain values
+      allocate( hSubIdx(totFreqByCol(j)), Htmp(totFreqByCol(j)) &
+        , tmpErr(totFreqByCol(j)), tmpSvd_Ev(totFreqByCol(j)) )
+
+      ! design matrix changes size based on number of significant offsets
       allocate( design( nblocks*k, totFreqByCol(j) ) )
 
       ! vector containing start and end indices for putting
@@ -427,24 +497,35 @@ contains
         ! which offsets for the j-th column and p-th predictor should be used
         wrk2 = col_order(:, j, p)
         ! the number of predictors to assign indices to the design matrix
-        desCol(p+1) = desCol(p) + size(pack(offIdxAll, wrk2 > 0))
+        ! desCol(p+1) = desCol(p) + size(pack(offIdxAll, wrk2 > 0)) <- wrong?
+        desCol(p+1) = desCol(p) + size(pack(wrk2, wrk2 > 0)) ! new
 
-!!! How are we dealing with fRatio here?
-!!! I'm not sure we actually are ... as of yet.
-        ! determine number of offsets that are at negative frequencies
-          ! and therefore require conjugation :: X(-f) = X*(f)
+      ! determine number of offsets that are at negative frequencies
+      ! and therefore require conjugation :: X(-f) = X*(f)
         nNegOff = size(pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll .le. 0) ))
         nPosOff = size(pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ))
         allocate(negOffIdx(nNegOff), posOffIdx(nPosOff))
-        negOffIdx = ( fRatio * &
-          (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll .le. 0) ) - 1) ) + 1
-        posOffIdx = (fRatio * &
-          (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ) - 1) ) + 1
+        ! takes into account fRatio :)
+        if (nNegOff > 0) then
+          negOffIdx = ( fRatio * &
+            (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll .le. 0) ) - 1) ) + 1
+          negOffIdx = abs(negOffIdx) + 2
+        end if
+
+        if (nPosOff > 0) then
+          posOffIdx = (fRatio * &
+            (pack(offIdxAll, (wrk2 > 0) .and. (offIdxAll > 0) ) - 1) ) + 1
+        end if
 
         ! these are columns of the design matrix which will have the -ve offs
         negIdxAll = (/ 1, nNegOff, desCol(p+1) - desCol(p) /)
 
         do i = 0, nblocks-1
+          if (p .eq. 1) then
+            ! response eigencoefficients
+            Y((i*k+1):((i+1)*k)) = yk1(freq_range_idx(1) + j - 1, :, i+1)
+          end if
+
           ! if there *are* offsets at negative frequencies:
           if (negIdxAll(2) .ne. 0) then
             design((i*k+1):((i+1)*k), desCol(p):(desCol(p) + nNegOff - 1)) = &
@@ -455,30 +536,29 @@ contains
             design((i*k+1):((i+1)*k), (desCol(p)+nNegOff):(desCol(p+1)-1)) = &
               transpose(yk2(posOffIdx, :, p, i+1))
           end if
-          if (i .eq. 0) then
-            ! response eigencoefficients should be put in here:
-            Y((i*k+1):((i+1)*k)) = yk1(freq_range_idx(1) + j - 1, :, i+1)
-          end if
 
           deallocate(negOffIdx, posOffIdx)
         end do
+
+        ! determind which columns of H should be used for this central freq
+        call findHidx(col_order(:, j, p) &
+          , hIdx(hPredBreak(p):(hPredBreak(p+1)-1)) &
+          , coh_nrow & !, size(hPredBreak(p):(hPredBreak(p+1)-1)) &
+          , hSubIdx((sum(totFreqByColByPred(1:p &
+            , j))+1):(sum(totFreqByColByPred(1:(p+1), j)))) &
+          , hPredBreak(p)-1) !, totFreqByColByPred(p, j))
       end do
-
-      allocate(hSubIdx(totFreqByCol(j)), Htmp(totFreqByCol(j)))
-
-      call findHidx(col_order(:, j, p), hIdx, coh_nrow, nhIdx, hSubIdx &
-        , totFreqByCol(j))
 
       call zSvdRegression(Y, design, nblocks*k, totFreqByCol(j), Htmp &
         , tmpErr, tmpSvd_Ev)
 
       H(j, hSubIdx) = Htmp
 
-      deallocate(design, hSubIdx, Htmp)
+      deallocate(design, hSubIdx, Htmp, tmpErr, tmpSvd_Ev)
     end do
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! call the svd regression code
+  ! cleanup
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call dpss_cleanup(1)
     call dpss_cleanup(2)
@@ -746,7 +826,7 @@ contains
     integer :: i, m, n, lda, ldu, ldvt, lwork, info, lrwork
     real*8 :: svd_ev(n), stdErr(n), lworkopt
     real*8, allocatable :: rwork(:), s(:)
-    complex*16 :: Y(m), X(m, n), beta(n)
+    complex*16 :: Y(m), X(m, n), Xcopy(m,n), beta(n)
     complex*16, allocatable :: svd_work(:), u(:, :), vt(:, :)
     character(1) :: jobu, jobvt
 
@@ -756,7 +836,7 @@ contains
     lda = m
     ldu = m
     ldvt = n
-
+    Xcopy = X
     ! set values according to:
     ! http://www.netlib.org/lapack/explore-html/index.html
     ! search for zgesvd
@@ -768,7 +848,7 @@ contains
 
     ! obtain optimal size for lwork
     lwork = -1
-    call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+    call zgesvd(jobu, jobvt, m, n, Xcopy, lda, s, u, ldu, vt, ldvt &
       , lworkopt, lwork, rwork, info)
 
     ! allocate the work array
@@ -776,7 +856,7 @@ contains
     allocate(svd_work(lwork))
 
     ! perform the svd
-    call zgesvd(jobu, jobvt, m, n, X, lda, s, u, ldu, vt, ldvt &
+    call zgesvd(jobu, jobvt, m, n, Xcopy, lda, s, u, ldu, vt, ldvt &
       , svd_work, lwork, rwork, info)
 
     ! calculate them betas '*' is matrix mult here
@@ -786,30 +866,33 @@ contains
     ! calculate the standard error estiamtes on the betas
     ! mandel eqn (20) NOT YET IMPLEMENTED
     do i = 1, n
-      stdErr(i) = -1 !sum(vt(:, i)x)
+      stdErr(i) = -1.0D0 !sum(vt(:, i)x)
     end do
 
     do i = 1, n
-      svd_ev(i) =  -1 ! NOT YET IMPLEMENTED!
+      svd_ev(i) =  -1.0D0 ! NOT YET IMPLEMENTED!
     end do
   end subroutine zSvdRegression
 
-  subroutine findHidx(col, hIdx, nCol, nhIdx, idxSub, nSub)
+  subroutine findHidx(col, hIdx, ncol, idxSub, baseIdx)
+    ! (col, hIdx, nCol, nhIdx, idxSub, nSub) <- old arguments
+    ! integer :: col(nCol), hIdx(nhIdx), idxAll(nCol), idxSub(nsub) &
+    !  , ncol, nhIdx, nSub, i, j <- old integer declaration
   ! col - contains the indicator column of MSC matrix
   ! hIdx - contains the indices of all the unique frequencies used in the
   ! regression
   ! idxSub - contains the index of the column of H in which to store coefs
-    integer :: col(nCol), hIdx(nhIdx), idxAll(nCol), idxSub(nsub) &
-      , ncol, nhIdx, nSub, i, j
+    integer :: col(:), hIdx(:), idxAll(ncol), idxSub(:), baseIdx &
+      , ncol, i, j
 
     idxAll = (/ (i, i = 1, nCol) /)
     idxSub = pack(idxAll, col > 0 )
     j = 1
 
-    do i = 1, nSub
-      do j = j, nhIdx
+    do i = 1, size(idxSub)
+      do j = j, size(hIdx)
         if (idxSub(i) == hIdx(j)) then
-          idxSub(i) = j
+          idxSub(i) = j + baseIdx
           exit
         end if
       end do
@@ -902,12 +985,6 @@ contains
     erfinv = dinvnorm(x) / dsqrt(2.0D0)
   end function erfinv
 
-  subroutine testem(x)
-    integer :: x
-
-    x = 5
-  end subroutine testem
-
 ! taken from WayBackMachine: https://web.archive.org/web/20151030215612/http://home.online.no/~pjacklam/notes/invnorm/
 ! and:
 ! https://stackedboxes.org/2017/05/01/acklams-normal-quantile-function/
@@ -962,8 +1039,91 @@ contains
     return
   end function dinvnorm
 
+  integer function block_increment(block_size, overlap)
+  ! determines index change for blocking based on overlap and block size.
+    integer :: block_size
+    real*8 :: overlap
+
+    block_increment = floor(block_size * (1.0D0 - overlap))
+    return
+  end function block_increment
+
+  integer function calculate_nblocks(ndata, block_size, block_incr)
+  ! how many blocks given ndata data points, with block_size and
+  ! increment.
+    integer :: ndata, block_size, block_incr, j
+
+    calculate_nblocks = size( (/ (j, j = 1 &
+      , ndata - block_size + 1, block_incr) /) )
+    return
+  end function calculate_nblocks
+
+  subroutine calc_tf_wt_eigen(block_incr, block_incr2 &
+    , block_size, block_size2, nblocks, d1, d2, npred &
+    , dt, dt2, nw, nw2, k, nFFT, nFFT2, yk1, yk2)
+  ! does all the weighted eigencoefficient calculations and declutters
+  ! tf() - also makes this more testable.
+  ! must call fft_setup for series 1 and 2 before calling this subroutine
+
+    integer :: block_incr, block_incr2, block_size, block_size2, nblocks &
+      , k, nFFT, nFFT2, i, j, dstart_idx, dend_idx &
+      , dstart_idx2, dend_idx2, npred
+    real*8 :: d1(:), d2(:, :), dt, dt2, nw, nw2, s1(nfreq), s2(nfreq2)
+    complex*16 :: yk1(:, :, :), yk2(:, :, :, :)
+
+    do i = 0, nblocks - 1
+      dstart_idx = i*block_incr + 1
+      dend_idx = dstart_idx + block_size - 1
+      dstart_idx2 = i*block_incr2 + 1
+      dend_idx2 = dstart_idx2 + block_size2 - 1
+      ! store the eigencoefficients by block for the response
+      call weighted_eigencoef(d1(dstart_idx:dend_idx), block_size, dt &
+       , nw, k, yk1(:, :, i+1), s1, nFFT, 1)
+    ! store the eigencoefficients by block and predictor for the inputs
+      do j = 1, npred
+        call weighted_eigencoef(d2(dstart_idx2:dend_idx2, j) &
+          , block_size2, dt2, nw2, k, yk2(:, :, j, i+1), s2, nFFT2, 2)
+      end do
+    end do
+  end subroutine calc_tf_wt_eigen
+
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!! Testing section !!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine testem(x)
+    integer :: x
 
+    x = 5
+  end subroutine testem
+
+  subroutine tstmatrix(x)
+    integer :: x(5, 3)
+
+    x(1, 1) = 2
+  end subroutine tstmatrix
+
+  subroutine mtmtstcalctfwteigen(block_incr, block_incr2 &
+    , block_size, block_size2, nblocks, d1, d2, dt, dt2, nw, nw2, k &
+    , nFFT, nFFT2, yk1, yk2, ndata, ndata2, npred)
+
+    integer :: block_incr, block_incr2, block_size, block_size2, nblocks &
+      , k, nFFT, nFFT2, i, j, dstart_idx, dend_idx &
+      , dstart_idx2, dend_idx2, ndata, ndata2, npred
+    real*8 :: d1(ndata), d2(ndata2, npred), dt, dt2, nw, nw2, s1(nfreq), s2(nfreq2)
+    complex*16 :: yk1(nfreq, k, nblocks), yk2(nfreq2, k, npred, nblocks)
+
+    call calc_tf_wt_eigen(block_incr, block_incr2 &
+      , block_size, block_size2, nblocks, d1, d2, npred &
+      , dt, dt2, nw, nw2, k, nFFT, nFFT2, yk1, yk2)
+  end subroutine mtmtstcalctfwteigen
+
+
+  subroutine tstfindhidx(col, hIdx, ncol, nhIdx, idxSub, nSub, baseIdx)
+    implicit none
+
+    integer :: ncol, nhIdx, nSub, baseIdx, col(ncol), hIdx(nhIdx), idxSub(nSub)
+
+    call findHidx(col, hIdx, ncol, idxSub, baseIdx)
+
+  end subroutine tstfindhidx
 end module mtm_mod
